@@ -63,7 +63,13 @@ if (process.platform === 'darwin') {
 }
 
 function run(args, opts = {}) {
-  return spawnSync('node', [cliPath, ...args], { env, encoding: 'utf8', ...opts })
+  // A hard timeout so a command that unexpectedly blocks on user input fails this script rather
+  // than hanging the CI job until the step-level timeout kills it with no useful output.
+  const res = spawnSync('node', [cliPath, ...args], { env, encoding: 'utf8', timeout: 30_000, ...opts })
+  if (res.error && res.error.code === 'ETIMEDOUT') {
+    fail(`command timed out (waiting on input?): ${args.join(' ')}`)
+  }
+  return res
 }
 
 function cleanup() {
@@ -143,19 +149,22 @@ if (process.platform === 'win32') {
   }
 }
 
-// 4. `show`'s success path is not exercised here (auth is interactive by design).
-//    The exit code cannot be asserted: some CI runners (GitHub's macOS images) have passwordless
-//    sudo, so the REAL backend legitimately succeeds and `show` exits 0. That the fake seam is
-//    absent from the release bundle is proven by the string-absence test in tests/streams.test.ts;
-//    here we assert only the invariant that holds in every environment — the secret never reaches
-//    stdout, whatever the backend decides.
-const showRes = run(['show', tokenName], { env: { ...env, CLAUDEFOB_FAKE_AUTH: '1' } })
-if (showRes.stdout !== '') fail(`show wrote to stdout: ${JSON.stringify(showRes.stdout)}`)
-if (![0, 3].includes(showRes.status)) fail(`show should exit 0 or 3, got ${showRes.status}`)
-// Only a REFUSED gate implies the token must be absent from stderr. When the runner's backend
-// accepts (passwordless sudo), printing the token to stderr is show's correct behaviour.
-if (showRes.status === 3 && (showRes.stdout.includes(tokenValue) || showRes.stderr.includes(tokenValue))) {
-  fail('show leaked the token despite a refused auth gate')
+// 4. `show` drives the REAL OS auth backend, which cannot be automated:
+//      - Windows: CredUIPromptForWindowsCredentials opens a modal dialog that never returns on a
+//        headless runner, so this step is skipped there entirely.
+//      - macOS: GitHub runners have passwordless sudo, so the backend legitimately succeeds and
+//        the exit code is not assertable; only the stdout invariant is.
+//    The logic itself is covered deterministically by the fake backend in tests/streams.test.ts,
+//    and the release bundle's freedom from that seam by the string-absence test there.
+if (process.platform === 'win32') {
+  console.log('skip: show is not exercised on Windows (modal credential dialog cannot be answered headlessly)')
+} else {
+  const showRes = run(['show', tokenName], { env: { ...env, CLAUDEFOB_FAKE_AUTH: '1' } })
+  if (showRes.stdout !== '') fail(`show wrote to stdout: ${JSON.stringify(showRes.stdout)}`)
+  if (![0, 3].includes(showRes.status)) fail(`show should exit 0 or 3, got ${showRes.status}`)
+  if (showRes.status === 3 && (showRes.stdout.includes(tokenValue) || showRes.stderr.includes(tokenValue))) {
+    fail('show leaked the token despite a refused auth gate')
+  }
 }
 
 // 5. Clean up.
