@@ -52,7 +52,7 @@ describe('--help and --version do not fall through to the activation picker', ()
     // citty invokes the parent command's run even after handling --version itself, so on an
     // interactive terminal the picker opened on top of the version output.
     const src = fs.readFileSync(path.join(import.meta.dir, '..', 'src', 'cli.ts'), 'utf8')
-    expect(src).toContain("['--help', '-h', '--version', '-v'].includes(a)")
+    expect(src).toContain("a === '--help' || a === '-h' || a === '--version' || a === '-v'")
   })
 
   test('--version reports on stderr, leaving stdout empty', () => {
@@ -72,5 +72,34 @@ describe('--help and --version do not fall through to the activation picker', ()
     const r = spawnSync('node', [cli, '--help'], { encoding: 'utf8' })
     expect(r.stdout).toBe('')
     expect(r.stderr).toContain('USAGE')
+  })
+})
+
+describe('unrecognised flags are a usage error, not an activation', () => {
+  const cli = path.join(import.meta.dir, '..', 'dist-test', 'cli.js')
+  const { spawnSync } = require('node:child_process') as typeof import('node:child_process')
+
+  test('a near miss like -version does not open the picker', () => {
+    // Reported in the wild: `claudefob -version` activated a token instead of reporting the typo.
+    const r = spawnSync('node', [cli, '-version'], { encoding: 'utf8' })
+    expect(r.status).toBe(2)
+    expect(r.stdout).toBe('')
+    expect(r.stderr).toContain('Unknown option: -version')
+  })
+
+  test('other malformed flags are rejected too', () => {
+    for (const flag of ['-help', '--verison', '-json']) {
+      const r = spawnSync('node', [cli, flag], { encoding: 'utf8' })
+      expect(r.status).toBe(2)
+      expect(r.stdout).toBe('')
+    }
+  })
+
+  test('valid global flags still work', () => {
+    for (const flag of ['--version', '-v', '--help', '-h']) {
+      const r = spawnSync('node', [cli, flag], { encoding: 'utf8' })
+      expect(r.status).toBe(0)
+      expect(r.stdout).toBe('')
+    }
   })
 })

@@ -636,7 +636,7 @@ const exportCommand = defineCommand({
   }),
 })
 
-export const VERSION = '0.3.1'
+export const VERSION = '0.3.2'
 
 /** Same command under another name, hidden from --help so only the canonical name is advertised. */
 function hiddenAlias<T extends { meta?: unknown }>(cmd: T, name: string): T {
@@ -681,7 +681,20 @@ const main = defineCommand({
     if (rawArgs.some((a) => subNames.includes(a))) return
     // citty handles --help/--version itself, but still invokes the parent's run afterwards. On an
     // interactive terminal that opened the activation picker on top of the version output.
-    if (rawArgs.some((a) => ['--help', '-h', '--version', '-v'].includes(a))) return
+    const KNOWN_FLAGS = ['--help', '-h', '--version', '-v', '--shell', '--json']
+    if (rawArgs.some((a) => a === '--help' || a === '-h' || a === '--version' || a === '-v')) return
+
+    // Anything else that looks like a flag is a mistake, not a request to activate a token. A
+    // near miss such as `-version` used to open the picker, which reads as the command having
+    // done something entirely different from what was asked.
+    const unknown = rawArgs.filter((a) => a.startsWith('-') && !KNOWN_FLAGS.some((f) => a === f || a.startsWith(f + '=')))
+    if (unknown.length > 0) {
+      throw new UsageError(
+        `Unknown option: ${unknown.join(', ')}\n` +
+          `Valid options here: ${KNOWN_FLAGS.join(', ')}\n` +
+          'Run `claudefob --help` for commands, or `claudefob` with no arguments to pick a token.',
+      )
+    }
     await doActivate({ shell: args.shell as string | undefined })
   }),
 })

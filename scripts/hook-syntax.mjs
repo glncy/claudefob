@@ -14,6 +14,16 @@ if (!fs.existsSync(CLI)) {
 }
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'claudefob-hooksyntax-'))
+// `init` writes hook.<ext> into the config dir. Point HOME and friends at a throwaway directory so
+// running this check never leaves hook.fish / hook.ps1 in the real ~/.config/claudefob.
+const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'claudefob-hooksyntax-home-'))
+const childEnv = {
+  ...process.env,
+  HOME: sandbox,
+  USERPROFILE: sandbox,
+  XDG_CONFIG_HOME: path.join(sandbox, '.config'),
+  APPDATA: path.join(sandbox, 'AppData', 'Roaming'),
+}
 let failures = 0
 let ran = 0
 const skipped = []
@@ -21,7 +31,10 @@ const skipped = []
 function block(dialect) {
   // --force: init refuses when a block is already installed on this machine, which would make
   // this check silently examine nothing.
-  const res = spawnSync(process.execPath, [CLI, 'init', '--shell', dialect, '--force'], { encoding: 'utf8' })
+  const res = spawnSync(process.execPath, [CLI, 'init', '--shell', dialect, '--force'], {
+    encoding: 'utf8',
+    env: childEnv,
+  })
   if (res.status !== 0) {
     console.error(`FAIL: claudefob init --shell ${dialect} exited ${res.status}`)
     failures++
