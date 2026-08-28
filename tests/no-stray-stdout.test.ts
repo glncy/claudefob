@@ -46,3 +46,31 @@ describe('the update command keeps package-manager output off stdout', () => {
     expect(block![0]).not.toContain("stdio: 'inherit'")
   })
 })
+
+describe('--help and --version do not fall through to the activation picker', () => {
+  test('the parent run returns early for help and version flags', () => {
+    // citty invokes the parent command's run even after handling --version itself, so on an
+    // interactive terminal the picker opened on top of the version output.
+    const src = fs.readFileSync(path.join(import.meta.dir, '..', 'src', 'cli.ts'), 'utf8')
+    expect(src).toContain("['--help', '-h', '--version', '-v'].includes(a)")
+  })
+
+  test('--version reports on stderr, leaving stdout empty', () => {
+    // stdout is what the shell wrapper evals. A version number there would be run as a command:
+    // "command not found: 0.3.0".
+    const { spawnSync } = require('node:child_process') as typeof import('node:child_process')
+    const cli = path.join(import.meta.dir, '..', 'dist-test', 'cli.js')
+    const r = spawnSync('node', [cli, '--version'], { encoding: 'utf8' })
+    expect(r.status).toBe(0)
+    expect(r.stdout).toBe('')
+    expect(r.stderr.trim()).toMatch(/^\d+\.\d+\.\d+$/)
+  })
+
+  test('--help reports on stderr, leaving stdout empty', () => {
+    const { spawnSync } = require('node:child_process') as typeof import('node:child_process')
+    const cli = path.join(import.meta.dir, '..', 'dist-test', 'cli.js')
+    const r = spawnSync('node', [cli, '--help'], { encoding: 'utf8' })
+    expect(r.stdout).toBe('')
+    expect(r.stderr).toContain('USAGE')
+  })
+})

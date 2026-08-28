@@ -636,7 +636,7 @@ const exportCommand = defineCommand({
   }),
 })
 
-export const VERSION = '0.3.0'
+export const VERSION = '0.3.1'
 
 /** Same command under another name, hidden from --help so only the canonical name is advertised. */
 function hiddenAlias<T extends { meta?: unknown }>(cmd: T, name: string): T {
@@ -679,6 +679,9 @@ const main = defineCommand({
     // subcommand token is present in the raw args; otherwise the subcommand already ran.
     const subNames = ['add', 'list', 'ls', 'show', 'status', 'use', 'stop', 'remove', 'rm', 'init', 'guide', 'update', 'export']
     if (rawArgs.some((a) => subNames.includes(a))) return
+    // citty handles --help/--version itself, but still invokes the parent's run afterwards. On an
+    // interactive terminal that opened the activation picker on top of the version output.
+    if (rawArgs.some((a) => ['--help', '-h', '--version', '-v'].includes(a))) return
     await doActivate({ shell: args.shell as string | undefined })
   }),
 })

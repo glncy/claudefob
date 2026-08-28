@@ -118,6 +118,9 @@ claudefob stop                               # deactivate
 `ls` and `rm` are accepted as aliases for `list` and `remove`. `-d` is short for `--description`,
 `-y` for `--yes`.
 
+`--help` and `--version` report on **stderr**, not stdout. stdout is reserved for the shell code
+the wrapper function evaluates, so a version number printed there would be run as a command.
+
 ### Environment variables
 
 | Variable | Effect |
