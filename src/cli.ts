@@ -371,7 +371,7 @@ const initCommand = defineCommand({
   args: { shell: { type: 'string' } },
   run: guard(async ({ args }) => {
     const shell = resolveShell(args)
-    err('Append the following to your shell rc file, then restart your shell:')
+    err('Append the following to your shell rc file. It takes effect in any terminal you open afterwards:')
     err('  claudefob init >> ~/.zshrc   # or the rc file for your shell')
     err('See `claudefob guide` for a full list of rc files and platform notes.')
     emitShellCode(codegenFor(shell).hookBlock())

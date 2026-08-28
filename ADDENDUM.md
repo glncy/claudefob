@@ -23,7 +23,7 @@ Token: ********
 Added "work".
 
 ⚠ Shell integration not installed — activating a token won't change your environment.
-    claudefob init >> ~/.zshrc && exec zsh
+    claudefob init >> ~/.zshrc
   More:  claudefob guide
 ```
 
@@ -32,7 +32,7 @@ $ claudefob use work
 Activated "work".
 
 ⚠ Shell integration not installed — this had no effect on your shell.
-    claudefob init >> ~/.zshrc && exec zsh
+    claudefob init >> ~/.zshrc
 ```
 
 Rules:

@@ -14,9 +14,9 @@ Keychain, Linux Secret Service, Windows Credential Manager) and activates exactl
 npm i -g claudefob
 ```
 
-Then wire up shell integration — append the hook block to your rc file and restart your shell.
-Pick the row for your shell; `--shell` is optional (claudefob detects it) and shown here only so
-each line is copy-pasteable as-is.
+Then wire up shell integration — append the hook block to your rc file. It takes effect in any
+terminal you open afterwards. Pick the row for your shell; `--shell` is optional (claudefob
+detects it) and is shown here only so each line is copy-pasteable as-is.
 
 | Platform | Shell | Command |
 |---|---|---|
@@ -31,26 +31,21 @@ each line is copy-pasteable as-is.
 ```sh
 # macOS — zsh
 claudefob init --shell posix >> ~/.zshrc
-exec zsh
 
 # macOS — bash (terminals are login shells here, so .bash_profile is the one that loads)
 claudefob init --shell posix >> ~/.bash_profile
-exec bash
 
 # Linux — bash (terminals are non-login shells here, so .bashrc is the one that loads)
 claudefob init --shell posix >> ~/.bashrc
-exec bash
 
 # macOS or Linux — fish
 claudefob init --shell fish >> ~/.config/fish/config.fish
-exec fish
 ```
 
 ```powershell
 # Windows — PowerShell 5.1 or 7. The profile usually does not exist yet, so create it first.
 if (!(Test-Path $PROFILE)) { New-Item -Type File -Path $PROFILE -Force }
 claudefob init --shell powershell | Add-Content $PROFILE
-. $PROFILE
 ```
 
 Windows notes: PowerShell 5.1 and PowerShell 7 use **separate** profile files, so install into each
