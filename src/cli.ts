@@ -222,6 +222,8 @@ const statusCommand = defineCommand({
         const { execFileSync } = require('node:child_process')
         const out = execFileSync('powershell', ['-NoProfile', '-Command', 'Get-ExecutionPolicy -Scope CurrentUser'], {
           encoding: 'utf8',
+          timeout: 3000,
+          windowsHide: true,
         }).trim()
         execPolicyBlocked = out === 'Restricted'
       } catch {

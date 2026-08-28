@@ -114,11 +114,21 @@ describe('stdout/stderr discipline over a real subprocess', () => {
     expect(exportR.status).toBe(0)
     expect(exportR.stdout.trim()).toBe("export CLAUDE_CODE_OAUTH_TOKEN='sk-ant-aaaa'")
 
-    const showOkR = runIn(['show', 'work'], undefined)
-    // CLAUDEFOB_FAKE_AUTH not set: show must fail closed (exit 3), and print nothing.
-    expect(showOkR.status).toBe(3)
-    expect(showOkR.stdout).toBe('')
-    expect(showOkR.stderr).not.toContain('sk-ant-aaaa')
+    // Deterministic fail-closed check: a backend that denies must yield exit 3 and print nothing.
+    const showDeniedR = spawnSync(
+      'node',
+      [distTestCli, 'show', 'work'],
+      { env: { ...env, CLAUDEFOB_FAKE_AUTH: '1', CLAUDEFOB_FAKE_AUTH_RESULT: 'fail' }, encoding: 'utf8' },
+    )
+    expect(showDeniedR.status).toBe(3)
+    expect(showDeniedR.stdout).toBe('')
+    expect(showDeniedR.stderr).not.toContain('sk-ant-aaaa')
+
+    // With no fake seam the real OS backend runs. Its outcome is environment-dependent (GitHub's
+    // macOS runners have passwordless sudo, so it can legitimately succeed), but in every
+    // environment the secret must never reach stdout.
+    const showRealR = runIn(['show', 'work'], undefined)
+    expect(showRealR.stdout).toBe('')
 
     const showFakeAuthR = spawnSync(
       'node',

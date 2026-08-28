@@ -37,7 +37,10 @@ function isTestBuild(): boolean {
 // treating a transient outage as a missing secret.
 export function isNoEntryError(e: unknown): boolean {
   const msg = e instanceof Error ? e.message : String(e)
-  return /no[\s\S]{0,40}entry/i.test(msg)
+  // Linux Secret Service phrases a missing secret as "no result found"; macOS/Windows use
+  // wording containing "no ... entry". Both mean "this secret does not exist", which is distinct
+  // from an unreachable or locked keystore.
+  return /no[\s\S]{0,40}entry/i.test(msg) || /no\s+result\s+found/i.test(msg)
 }
 
 export function realKeystore(): Keystore {

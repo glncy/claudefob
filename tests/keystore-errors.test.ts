@@ -13,6 +13,12 @@ describe('isNoEntryError distinguishes "no such secret" from other keystore fail
     expect(isNoEntryError(new Error('Ambiguous'))).toBe(false)
   })
 
+  test('matches the Linux Secret Service phrasing for a missing secret', () => {
+    // Regression: this message was previously classified as an unavailable keystore, which made
+    // a missing secret on Linux exit 4 instead of being reported as absent.
+    expect(isNoEntryError(new Error("Couldn't access platform storage: Secret Service: no result found"))).toBe(true)
+  })
+
   test('non-Error values never count as NoEntry', () => {
     expect(isNoEntryError('random string')).toBe(false)
     expect(isNoEntryError(undefined)).toBe(false)
