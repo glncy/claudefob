@@ -371,10 +371,13 @@ const initCommand = defineCommand({
   args: { shell: { type: 'string' } },
   run: guard(async ({ args }) => {
     const shell = resolveShell(args)
-    err('Append the following to your shell rc file. It takes effect in any terminal you open afterwards:')
+    // Names the detected shell and its usual rc file, but does not imply the user must use that
+    // file — `claudefob init >> ~/.zprofile` is equally valid and the CLI cannot see the redirect.
+    err(`Detected shell: ${shell}. Override with --shell.`)
+    err('The block below goes in a shell startup file — commonly ' + `${suggestedRcFile(shell)}` + '. For example:')
     err(`  ${installCommandFor(shell)}`)
-    err(`Detected shell: ${shell} (${suggestedRcFile(shell)}). Override with --shell.`)
-    err('See `claudefob guide` for other rc files and platform notes.')
+    err('It takes effect in any terminal you open afterwards.')
+    err('Run `claudefob guide` for the full list of startup files and which one to pick.')
     emitShellCode(codegenFor(shell).hookBlock())
   }),
 })
