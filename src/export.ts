@@ -4,6 +4,12 @@ import { codegenFor, type ShellDialect } from './shell/index.ts'
 import { emitShellCode, err } from './ui/out.ts'
 
 export const VAR = 'CLAUDE_CODE_OAUTH_TOKEN'
+/**
+ * Records which token claudefob itself applied to this shell. Sync only ever clears `VAR` when
+ * this marker is present, so a `CLAUDE_CODE_OAUTH_TOKEN` the user exported by hand is never
+ * stomped by claudefob deactivating.
+ */
+export const APPLIED_VAR = 'CLAUDEFOB_APPLIED'
 
 function debug(e: unknown): void {
   if (process.env.CLAUDEFOB_DEBUG === '1') {
@@ -15,10 +21,19 @@ function debug(e: unknown): void {
  * SPEC §4.11 — fail silent. Every failure mode (missing store, corrupt store, dead keystore) must
  * produce zero output and never throw past this function.
  */
-export function runExport(shell: ShellDialect): void {
+export function runExport(shell: ShellDialect, opts: { sync?: boolean } = {}): void {
   try {
+    const gen = codegenFor(shell)
     const store = loadStore()
-    if (!store.active) return
+    if (!store.active) {
+      // Startup (non-sync) stays silent: emitting an unset there would clobber a variable the
+      // user exported themselves earlier in their rc. During a prompt sync we know claudefob set
+      // it, because APPLIED_VAR is in this shell's environment.
+      if (opts.sync && process.env[APPLIED_VAR]) {
+        emitShellCode([gen.unsetEnv(VAR), gen.unsetEnv(APPLIED_VAR)].join('\n'))
+      }
+      return
+    }
     const rec = findToken(store, store.active)
     if (!rec) return
     let secret: string | null
@@ -29,7 +44,8 @@ export function runExport(shell: ShellDialect): void {
       return
     }
     if (!secret) return
-    emitShellCode(codegenFor(shell).setEnv(VAR, secret))
+    if (opts.sync && process.env[APPLIED_VAR] === store.active) return // already in sync, emit nothing
+    emitShellCode([gen.setEnv(VAR, secret), gen.setEnv(APPLIED_VAR, store.active)].join('\n'))
   } catch (e) {
     debug(e)
   }

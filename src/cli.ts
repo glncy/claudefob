@@ -460,7 +460,9 @@ const updateCommand = defineCommand({
 
 const exportCommand = defineCommand({
   meta: { name: 'export', description: 'Internal: emit shell code for current state', hidden: true },
-  args: { shell: { type: 'string' } },
+  // `--sync` is internal: it appears only inside the generated hook block, never in help, and is
+  // never something a user types. It differs from plain `export` in that it may emit an unset.
+  args: { shell: { type: 'string' }, sync: { type: 'boolean' } },
   run: guard(async ({ args }) => {
     let shell: ShellDialect
     try {
@@ -469,11 +471,11 @@ const exportCommand = defineCommand({
       debug(e)
       return
     }
-    runExport(shell)
+    runExport(shell, { sync: Boolean(args.sync) })
   }),
 })
 
-export const VERSION = '0.1.0'
+export const VERSION = '0.2.0'
 
 /** Same command under another name, hidden from --help so only the canonical name is advertised. */
 function hiddenAlias<T extends { meta?: unknown }>(cmd: T, name: string): T {

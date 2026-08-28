@@ -77,13 +77,55 @@ describe('export fails silent (SPEC §4.11)', () => {
     expect(out).toBe('')
   })
 
-  test('active token with a working keystore emits exactly one line of shell code', () => {
+  test('active token with a working keystore emits the export plus the applied marker', () => {
     let store = addToken(emptyStore(), { name: 'work', createdAt: 'now', last4: 'aaaa' })
     store = setActive(store, 'work')
     saveStore(store, storePath())
     const { mapKeystore } = require('./helpers/fakeKeystore.ts') as typeof import('./helpers/fakeKeystore.ts')
     __setKeystoreForTests(mapKeystore({ work: 'sk-ant-aaaa' }))
     const out = captureStdout(() => runExport('posix'))
-    expect(out).toBe("export CLAUDE_CODE_OAUTH_TOKEN='sk-ant-aaaa'\n")
+    expect(out).toBe("export CLAUDE_CODE_OAUTH_TOKEN='sk-ant-aaaa'\nexport CLAUDEFOB_APPLIED='work'\n")
+  })
+
+  test('sync with nothing active clears the variable only when claudefob applied it', () => {
+    saveStore(setActive(emptyStore(), null), storePath())
+    const prev = process.env.CLAUDEFOB_APPLIED
+
+    // No marker: a CLAUDE_CODE_OAUTH_TOKEN the user exported by hand must survive untouched.
+    delete process.env.CLAUDEFOB_APPLIED
+    expect(captureStdout(() => runExport('posix', { sync: true }))).toBe('')
+
+    // Marker present: claudefob set it, so deactivation propagates to this shell.
+    process.env.CLAUDEFOB_APPLIED = 'work'
+    expect(captureStdout(() => runExport('posix', { sync: true }))).toBe(
+      'unset CLAUDE_CODE_OAUTH_TOKEN\nunset CLAUDEFOB_APPLIED\n',
+    )
+
+    if (prev === undefined) delete process.env.CLAUDEFOB_APPLIED
+    else process.env.CLAUDEFOB_APPLIED = prev
+  })
+
+  test('sync emits nothing when this shell already has the active token applied', () => {
+    let store = addToken(emptyStore(), { name: 'work', createdAt: 'now', last4: 'aaaa' })
+    store = setActive(store, 'work')
+    saveStore(store, storePath())
+    const { mapKeystore } = require('./helpers/fakeKeystore.ts') as typeof import('./helpers/fakeKeystore.ts')
+    __setKeystoreForTests(mapKeystore({ work: 'sk-ant-aaaa' }))
+    const prev = process.env.CLAUDEFOB_APPLIED
+    process.env.CLAUDEFOB_APPLIED = 'work'
+    expect(captureStdout(() => runExport('posix', { sync: true }))).toBe('')
+    if (prev === undefined) delete process.env.CLAUDEFOB_APPLIED
+    else process.env.CLAUDEFOB_APPLIED = prev
+  })
+
+  test('startup export stays silent when nothing is active, even with a marker present', () => {
+    // Startup must never emit an unset: the user may have exported the variable earlier in their
+    // rc, before the claudefob block.
+    saveStore(setActive(emptyStore(), null), storePath())
+    const prev = process.env.CLAUDEFOB_APPLIED
+    process.env.CLAUDEFOB_APPLIED = 'work'
+    expect(captureStdout(() => runExport('posix'))).toBe('')
+    if (prev === undefined) delete process.env.CLAUDEFOB_APPLIED
+    else process.env.CLAUDEFOB_APPLIED = prev
   })
 })

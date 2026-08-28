@@ -108,11 +108,11 @@ describe('stdout/stderr discipline over a real subprocess', () => {
 
     const useR = runIn(['use', 'work', '--shell', 'posix'])
     expect(useR.status).toBe(0)
-    expect(useR.stdout.trim()).toBe("export CLAUDE_CODE_OAUTH_TOKEN='sk-ant-aaaa'")
+    expect(useR.stdout.trim().split('\n')[0]).toBe("export CLAUDE_CODE_OAUTH_TOKEN='sk-ant-aaaa'")
 
     const exportR = runIn(['export', '--shell', 'posix'])
     expect(exportR.status).toBe(0)
-    expect(exportR.stdout.trim()).toBe("export CLAUDE_CODE_OAUTH_TOKEN='sk-ant-aaaa'")
+    expect(exportR.stdout.trim().split('\n')[0]).toBe("export CLAUDE_CODE_OAUTH_TOKEN='sk-ant-aaaa'")
 
     // Deterministic fail-closed check: a backend that denies must yield exit 3 and print nothing.
     const showDeniedR = spawnSync(

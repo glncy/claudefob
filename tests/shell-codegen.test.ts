@@ -102,3 +102,50 @@ describe('hookBlock', () => {
     expect(block).toContain('if ($LASTEXITCODE -ne 0) { return }')
   })
 })
+
+describe('hook blocks carry the cross-terminal prompt sync', () => {
+  test('posix registers a precmd hook for zsh and PROMPT_COMMAND for bash', () => {
+    const b = codegenFor('posix').hookBlock()
+    expect(b).toContain('add-zsh-hook precmd _claudefob_sync')
+    expect(b).toContain('PROMPT_COMMAND="_claudefob_sync')
+  })
+
+  test('posix seeds the marker at startup, not lazily inside the hook', () => {
+    // Regression: creating the marker on first sync stamps it AFTER the store changed, so the
+    // very first switch made in another terminal was never picked up.
+    const b = codegenFor('posix').hookBlock()
+    const seedAt = b.indexOf(': > "${TMPDIR:-/tmp}/claudefob-sync-$$"')
+    const funcAt = b.indexOf('_claudefob_sync() {')
+    expect(seedAt).toBeGreaterThan(-1)
+    expect(seedAt).toBeLessThan(funcAt)
+  })
+
+  test('posix sync uses only builtins on the unchanged path — no fork per prompt', () => {
+    const b = codegenFor('posix').hookBlock()
+    const fn = b.slice(b.indexOf('_claudefob_sync() {'), b.indexOf('if [ -n "${ZSH_VERSION:-}" ]'))
+    // The guard that runs on every prompt must be `[ -nt ]` plus `: >`, both shell builtins.
+    expect(fn).toContain('-nt "$__cf_marker"')
+    expect(fn).not.toContain('stat ')
+    expect(fn).not.toContain('date ')
+  })
+
+  test('fish binds the sync to the fish_prompt event', () => {
+    const b = codegenFor('fish').hookBlock()
+    expect(b).toContain('--on-event fish_prompt')
+    expect(b).toContain('--sync')
+  })
+
+  test('powershell wraps prompt and preserves the original', () => {
+    const b = codegenFor('powershell').hookBlock()
+    expect(b).toContain('__claudefob_origPrompt')
+    expect(b).toContain('--sync')
+  })
+
+  test('every dialect keeps its fence markers intact', () => {
+    for (const d of ['posix', 'fish', 'powershell'] as const) {
+      const b = codegenFor(d).hookBlock()
+      expect(b.startsWith('# >>> claudefob >>>')).toBe(true)
+      expect(b.trimEnd().endsWith('# <<< claudefob <<<')).toBe(true)
+    }
+  })
+})

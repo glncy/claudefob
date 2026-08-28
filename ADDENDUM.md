@@ -157,3 +157,24 @@ Node runtime's own start, against a 100 ms budget asserted in CI on all three pl
 `KeystoreUnavailableError` previously carried the bare text "The OS keystore is unavailable."
 `keystoreHint(platform)` in `src/keystore.ts` now supplies platform-specific remediation — the
 Linux branch prints the exact commands CI runs, so printed advice cannot drift from what works.
+
+## A8. Cross-terminal sync (v0.2.0)
+
+An already-open terminal could not see a switch made elsewhere, because environment variables are
+per-process. Resolved without any user-facing flag: the sync is part of the standard hook block.
+
+- A prompt hook (`precmd` on zsh, `PROMPT_COMMAND` on bash, `--on-event fish_prompt` on fish, a
+  wrapped `prompt` function on PowerShell) re-syncs at the next prompt.
+- The unchanged path costs **zero processes**: `[ -nt ]` and `: >` are shell builtins. claudefob
+  runs only on the first prompt after `store.json` changes.
+- The marker file is seeded **at shell startup**, not lazily inside the hook. Creating it lazily
+  stamps it after the store already changed, so the first switch was silently missed.
+- `export` gained an internal `--sync` flag, present only inside the generated hook block and
+  never typed by a user. It differs from plain `export` in that it may emit an unset.
+- Deactivation propagates only for a token claudefob applied, tracked by `CLAUDEFOB_APPLIED`.
+  A `CLAUDE_CODE_OAUTH_TOKEN` the user exported by hand is never cleared.
+- Plain startup `export` still emits nothing when inactive, so it cannot clobber a variable set
+  earlier in the user's rc.
+
+**Not solvable:** a running Claude Code process keeps the token it launched with. Its environment
+was copied at spawn and nothing outside it can change that.

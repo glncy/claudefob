@@ -135,11 +135,24 @@ can't confidently reason about), it writes **nothing** and prints the one-line m
 No backup file is ever created — the round-trip check is the safety net. `claudefob stop` never
 opens this file at all.
 
-## Known limitation
+## Keeping terminals in sync
 
-An already-open shell keeps its old `CLAUDE_CODE_OAUTH_TOKEN` value until you restart it or the
-`claudefob` shell function patches it directly — `claudefob status` reports this as `stale` so you
-notice.
+Environment variables are per-process, so a switch made in one terminal cannot reach into another
+one that is already open. The hook block handles this with a prompt hook: any open terminal picks
+up the change at its next prompt, with no restart and no command to run.
+
+The check costs nothing on the unchanged path — `[ -nt ]` and `: >` are shell builtins, so
+claudefob only actually runs on the first prompt after `store.json` changes.
+
+Deactivation propagates too, but only for a token claudefob set. If you exported
+`CLAUDE_CODE_OAUTH_TOKEN` yourself somewhere else, claudefob leaves it alone — it tracks its own
+work with a `CLAUDEFOB_APPLIED` marker and clears the variable only when that marker is present.
+
+**One thing this cannot fix:** a Claude Code session that is already running. Its environment was
+copied when the process started, so it keeps the token it launched with until you exit and start
+`claude` again. No tool can change a running process's environment.
+
+If you installed the hook before v0.2.0, re-run `claudefob init` to pick up the sync block.
 
 ## License
 
