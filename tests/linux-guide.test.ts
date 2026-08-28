@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { linuxKeyringGuide } from '../src/linux-keyring-guide.ts'
+import { linuxKeyringGuide, linuxKeyringBlock } from '../src/linux-keyring-guide.ts'
 import fs from 'node:fs'
 import path from 'node:path'
 
@@ -55,5 +55,33 @@ describe('guide install examples', () => {
     const block = src.match(/const guideCommand[\s\S]*?\n\}\)\n/)
     expect(block![0]).toContain("process.platform === 'linux'")
     expect(block![0]).toContain('linuxKeyringGuide()')
+  })
+})
+
+describe('init --keyring emits a redirectable snippet', () => {
+  test('the block is fenced with its own markers, distinct from the hook block', () => {
+    const b = linuxKeyringBlock()
+    expect(b.split('\n')[0]).toBe('# >>> claudefob keyring >>>')
+    expect(b.trimEnd().split('\n').pop()).toBe('# <<< claudefob keyring <<<')
+    // Separate markers so removing the hook block never eats the keyring setup, and vice versa.
+    expect(b).not.toContain('# >>> claudefob >>>')
+  })
+
+  test('both guards are present, so repeated sessions do not stack daemons', () => {
+    const b = linuxKeyringBlock()
+    expect(b).toContain('if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then')
+    expect(b).toContain('if [ -z "${GNOME_KEYRING_CONTROL:-}" ]; then')
+  })
+
+  test('prefers the systemd user bus before launching its own', () => {
+    const b = linuxKeyringBlock()
+    expect(b.indexOf('/run/user/$(id -u)/bus')).toBeLessThan(b.indexOf('dbus-launch'))
+  })
+
+  test('the snippet goes to stdout while the instructions go to stderr', () => {
+    const src = fs.readFileSync(path.join(import.meta.dir, '..', 'src', 'cli.ts'), 'utf8')
+    const block = src.match(/const initCommand[\s\S]*?\n\}\)\n/)
+    expect(block![0]).toContain('emitShellCode')
+    expect(block![0]).toContain('linuxKeyringBlock()')
   })
 })

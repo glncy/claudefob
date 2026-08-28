@@ -2,7 +2,7 @@ import { defineCommand, runMain } from 'citty'
 import { loadStore, saveStore, findToken, addToken, removeToken, setActive, validateName, validateDescription, last4, mask, type TokenRecord } from './store.ts'
 import { getKeystore, KeystoreUnavailableError } from './keystore.ts'
 import { keyringPersistence, ephemeralKeyringWarning } from './keyring-persistence.ts'
-import { linuxKeyringGuide } from './linux-keyring-guide.ts'
+import { linuxKeyringGuide, linuxKeyringBlock } from './linux-keyring-guide.ts'
 import { codegenFor, detectShell, parseShellFlag, type ShellDialect } from './shell/index.ts'
 import { ensureOnboarding } from './claude-config.ts'
 import { rcCandidates, hookScriptPath, configDir } from './paths.ts'
@@ -389,10 +389,26 @@ const initCommand = defineCommand({
     shell: { type: 'string' },
     inline: { type: 'boolean' },
     force: { type: 'boolean' },
+    keyring: { type: 'boolean' },
   },
   run: guard(async ({ args }) => {
     const shell = resolveShell(args)
     const gen = codegenFor(shell)
+
+    // --keyring emits only the D-Bus + gnome-keyring startup snippet, so it can be redirected into
+    // a startup file. It must be sourced BEFORE the claudefob block, which is why it is a separate
+    // command rather than part of the hook.
+    if (args.keyring) {
+      err('D-Bus and gnome-keyring startup snippet, for a headless Linux box.')
+      err('It must come BEFORE the claudefob block in your startup file. If the block is already')
+      err('there, remove it, append this, then re-run `claudefob init`:')
+      err("  sed -i '/# >>> claudefob >>>/,/# <<< claudefob <<</d' ~/.zshrc   # GNU sed (Linux)")
+      err('  claudefob init --keyring >> ~/.zshrc')
+      err('  claudefob init >> ~/.zshrc')
+      emitShellCode('\n' + linuxKeyringBlock())
+      return
+    }
+
     err(`Detected shell: ${shell}. Override with --shell.`)
 
 
@@ -649,7 +665,7 @@ const exportCommand = defineCommand({
   }),
 })
 
-export const VERSION = '0.3.5'
+export const VERSION = '0.3.6'
 
 /** Same command under another name, hidden from --help so only the canonical name is advertised. */
 function hiddenAlias<T extends { meta?: unknown }>(cmd: T, name: string): T {

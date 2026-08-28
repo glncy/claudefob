@@ -17,7 +17,15 @@ export function linuxKeyringGuide(): string {
     '  Install it:',
     '    sudo apt-get install -y gnome-keyring dbus-x11',
     '',
-    '  Then add this to your shell startup file, ABOVE the claudefob block:',
+    '  Add the startup snippet to your shell startup file, ABOVE the claudefob block:',
+    '    claudefob init --keyring >> ~/.zshrc',
+    '',
+    '  If the claudefob block is already in that file, remove it first so the ordering is right:',
+    "    sed -i '/# >>> claudefob >>>/,/# <<< claudefob <<</d' ~/.zshrc",
+    '    claudefob init --keyring >> ~/.zshrc',
+    '    claudefob init >> ~/.zshrc',
+    '',
+    '  For reference, that snippet is:',
     '',
     '    # D-Bus session bus: prefer the systemd user bus, fall back to launching one.',
     '    if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then',
@@ -52,5 +60,32 @@ export function linuxKeyringGuide(): string {
     '',
     '  Revealing a token (`claudefob show`) needs sudo here: pkexec has no polkit agent to ask on',
     '  a headless box, so claudefob prompts with sudo instead.',
+  ].join('\n')
+}
+
+/**
+ * The startup snippet on its own, for stdout, so it can be appended:
+ *   claudefob init --keyring >> ~/.zshrc
+ * The guide prints prose on stderr and cannot be redirected into a file.
+ */
+export function linuxKeyringBlock(): string {
+  return [
+    '# >>> claudefob keyring >>>',
+    '# D-Bus session bus: prefer the systemd user bus, fall back to launching one.',
+    'if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then',
+    '  if [ -S "/run/user/$(id -u)/bus" ]; then',
+    '    export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u)/bus"',
+    '  else',
+    '    export $(dbus-launch)',
+    '  fi',
+    'fi',
+    '',
+    '# gnome-keyring secrets component, unlocked with an empty passphrase. Without this a headless',
+    '# box has nothing to store secrets in, and libsecret falls back to a memory-only collection',
+    '# that is lost at the next reboot.',
+    'if [ -z "${GNOME_KEYRING_CONTROL:-}" ]; then',
+    '  eval "$(printf \'\\n\' | gnome-keyring-daemon --unlock --components=secrets 2>/dev/null)"',
+    'fi',
+    '# <<< claudefob keyring <<<',
   ].join('\n')
 }
