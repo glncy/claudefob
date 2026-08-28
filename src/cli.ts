@@ -636,7 +636,7 @@ const exportCommand = defineCommand({
   }),
 })
 
-export const VERSION = '0.3.2'
+export const VERSION = '0.3.3'
 
 /** Same command under another name, hidden from --help so only the canonical name is advertised. */
 function hiddenAlias<T extends { meta?: unknown }>(cmd: T, name: string): T {
@@ -716,6 +716,15 @@ const HELP_EXAMPLES = [
 
 async function start() {
   const argv = process.argv.slice(2)
+
+  // Handled here rather than by citty: citty only honours --version/--help when they are the sole
+  // argument, and the shell wrapper always appends `--shell posix`. Through the wrapper the flags
+  // silently produced no output at all. Both write to stderr, since stdout is what the wrapper
+  // evaluates.
+  if (argv.includes('--version') || argv.includes('-v')) {
+    err(VERSION)
+    process.exit(0)
+  }
 
   // Detached background probe for the update check (ADDENDUM A3). Never prints anything.
   if (argv[0] === '__update-probe') {

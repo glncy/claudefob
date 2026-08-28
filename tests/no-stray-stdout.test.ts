@@ -95,6 +95,21 @@ describe('unrecognised flags are a usage error, not an activation', () => {
     }
   })
 
+  test('--version works with the flags the shell wrapper appends', () => {
+    // The wrapper always adds `--shell posix`, and citty only honours --version when it is the
+    // sole argument — so through the wrapper the command silently printed nothing at all.
+    const r = spawnSync('node', [cli, '--version', '--shell', 'posix'], { encoding: 'utf8' })
+    expect(r.status).toBe(0)
+    expect(r.stdout).toBe('')
+    expect(r.stderr.trim()).toMatch(/^\d+\.\d+\.\d+$/)
+  })
+
+  test('--help works with the flags the shell wrapper appends', () => {
+    const r = spawnSync('node', [cli, '--help', '--shell', 'posix'], { encoding: 'utf8' })
+    expect(r.stdout).toBe('')
+    expect(r.stderr).toContain('USAGE')
+  })
+
   test('valid global flags still work', () => {
     for (const flag of ['--version', '-v', '--help', '-h']) {
       const r = spawnSync('node', [cli, flag], { encoding: 'utf8' })
