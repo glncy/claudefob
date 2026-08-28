@@ -104,3 +104,32 @@ when stdin is not a TTY — error with exit 2 instead. No color when stderr is n
 **Short flags.** `-d` for `--description`, `-y` for `--yes`.
 
 **`--help` carries examples**, not only a flag dump.
+
+## A6. Release workflow — npm Trusted Publishing (OIDC)
+
+Two GitHub Actions workflows.
+
+**`.github/workflows/ci.yml`** — on push to `main` and on pull request. Matrix over
+`macos-latest`, `ubuntu-latest`, `windows-latest`: typecheck, unit tests, build, smoke-run
+`node dist/cli.js --help` and `--version`. Linux additionally runs the keystore integration
+step under a Secret Service daemon. Also asserts the SPEC §A5 startup budget on the
+no-active-token `export` path.
+
+**`.github/workflows/release.yml`** — on tag `v*`. Re-runs the full matrix, then publishes.
+
+Authentication is **npm Trusted Publishing via OIDC** — no `NPM_TOKEN`, no long-lived credential
+stored in GitHub. Requirements:
+
+- job permissions: `id-token: write` and `contents: read`
+- npm CLI 11.5.1 or newer in the job (`npm install -g npm@latest` before publishing)
+- **no** `NODE_AUTH_TOKEN` env var and no `.npmrc` auth line — their presence disables OIDC
+- `npm publish` emits provenance automatically under OIDC
+
+One-time manual setup after the first publish: on npmjs.com, package settings → Trusted Publisher
+→ GitHub Actions → repository `glncy/claudefob`, workflow file `release.yml`.
+
+The first `0.1.0` publish is manual, because the package must exist before a trusted publisher can
+be configured against it. Every release after that is `git tag vX.Y.Z && git push --tags`.
+
+Guard: `release.yml` must verify that the tag version matches `package.json` version and fail
+otherwise, so a mistagged release cannot publish the wrong version.
