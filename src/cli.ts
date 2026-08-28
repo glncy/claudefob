@@ -388,6 +388,12 @@ const initCommand = defineCommand({
         err(`  ${installCommandFor(shell)}`)
         err('It takes effect in any terminal you open afterwards. Upgrades rewrite only the script,')
         err('so your startup file never needs editing again.')
+        err('')
+        // A child process cannot modify its parent shell, and with `>>` its stdout goes to the rc
+        // file anyway — so activating the current shell has to be one command the user runs.
+        err('To activate it in THIS terminal without opening a new one:')
+        err(`  ${gen.id === 'powershell' ? `. ${gen.quote(scriptPath)}` : `. ${gen.quote(scriptPath)}`}`)
+        err('')
         err('Run `claudefob guide` for the full list of startup files and which one to pick.')
         emitShellCode('\n' + gen.sourceBlock(scriptPath) + '\n')
         return
@@ -578,7 +584,7 @@ const exportCommand = defineCommand({
   }),
 })
 
-export const VERSION = '0.2.0'
+export const VERSION = '0.2.1'
 
 /** Same command under another name, hidden from --help so only the canonical name is advertised. */
 function hiddenAlias<T extends { meta?: unknown }>(cmd: T, name: string): T {

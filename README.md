@@ -25,6 +25,16 @@ terminal you open afterwards.
 # <<< claudefob <<<
 ```
 
+To activate it in the terminal you are already in, without opening a new one:
+
+```sh
+. ~/.config/claudefob/hook.sh
+```
+
+`init` prints that exact line for you. It is needed only once, at install time — a child process
+cannot modify its parent shell, and with `>>` the block goes to your rc file rather than to the
+shell.
+
 Prefer everything in one place? `claudefob init --inline` emits the whole block instead and writes
 no extra file — you then re-run it after each upgrade.
 

@@ -83,6 +83,16 @@ describe('stdout/stderr discipline over a real subprocess', () => {
     r.home.cleanup()
   })
 
+  test('init tells you how to activate the current shell without a new terminal', () => {
+    const r = run(['init', '--shell', 'posix'])
+    const script = path.join(r.home.storeDir, 'claudefob', 'hook.sh')
+    expect(r.stderr).toContain('To activate it in THIS terminal')
+    expect(r.stderr).toContain(`. '${script}'`)
+    // The instruction is guidance, so it must not land on stdout and get appended to an rc file.
+    expect(r.stdout).not.toContain('THIS terminal')
+    r.home.cleanup()
+  })
+
   test('init --inline emits the full block and writes no script', () => {
     const r = run(['init', '--shell', 'posix', '--inline'])
     const script = path.join(r.home.storeDir, 'claudefob', 'hook.sh')
