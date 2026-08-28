@@ -229,3 +229,24 @@ An earlier revision inspected the target rc file and padded only when it did not
 blank line. It was removed: it is cosmetic, it needed an `--rc` flag to be correct, and it guessed
 wrong whenever the shell redirect pointed somewhere other than the detected shell's default file.
 `init` emits one leading blank line, always.
+
+
+## A13. Detect a non-persistent Linux keyring
+
+Reported from a headless Ubuntu devbox: after a reboot, `claudefob status` still showed an active
+token while activating it failed with "missing from the keystore".
+
+Cause: with no unlocked login keyring, libsecret stores into the Secret Service **session**
+collection, which is memory-backed. Writes and reads succeed for the life of that session; every
+secret is lost on reboot. `store.json` is a plain file and survives, so the metadata outlives the
+secrets it describes.
+
+`keyringPersistence()` reports `persistent` / `ephemeral` / `unknown`. It returns `unknown` off
+Linux, `persistent` when KWallet is present or a non-session `*.keyring` file exists, and
+`ephemeral` when the keyrings directory is missing, empty, or holds only a session keyring.
+Persistence cannot be proven without a reboot, but the absence of any on-disk keyring is decisive
+enough to warn on.
+
+- `add` warns at the moment the secret is stored, rather than after it has already been lost.
+- The drift error no longer advises "remove and re-add" on such a machine — that would simply
+  repeat the loss. It names the cause and the Ubuntu fix instead.

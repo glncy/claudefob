@@ -149,6 +149,35 @@ every shell startup (so activation survives opening a new terminal), and it wrap
 command in a shell function so that running `claudefob use ...` from an already-open shell also
 patches that shell's environment immediately.
 
+## Linux: make sure your keyring is persistent
+
+On a headless Linux box — a devbox reached over SSH, a container — there is often no unlocked
+login keyring. libsecret then stores secrets in the Secret Service **session** collection, which
+lives in memory. Everything works until the machine reboots, and then every secret is gone, while
+claudefob's metadata survives: `claudefob status` still names an active token and activating it
+fails with "no longer in the keystore".
+
+claudefob warns about this when you run `claudefob add`. To check by hand:
+
+```sh
+ls -la ~/.local/share/keyrings/     # a login.keyring or *.keyring means storage survives a reboot
+```
+
+On Ubuntu or Debian, create a login keyring that PAM unlocks automatically:
+
+```sh
+sudo apt-get install -y gnome-keyring libpam-gnome-keyring
+# log out and back in so PAM creates and unlocks ~/.local/share/keyrings/login.keyring
+```
+
+Over SSH with no desktop session, unlock one per session instead:
+
+```sh
+gnome-keyring-daemon --unlock --components=secrets
+```
+
+KWallet works too — it exposes the same Secret Service API and keeps its own persistent store.
+
 ## Security model
 
 **Protects against:** secrets ending up in dotfiles, dotfile backups, Time Machine snapshots,

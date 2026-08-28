@@ -1,6 +1,7 @@
 import { defineCommand, runMain } from 'citty'
 import { loadStore, saveStore, findToken, addToken, removeToken, setActive, validateName, validateDescription, last4, mask, type TokenRecord } from './store.ts'
 import { getKeystore, KeystoreUnavailableError } from './keystore.ts'
+import { keyringPersistence, ephemeralKeyringWarning } from './keyring-persistence.ts'
 import { codegenFor, detectShell, parseShellFlag, type ShellDialect } from './shell/index.ts'
 import { ensureOnboarding } from './claude-config.ts'
 import { rcCandidates, hookScriptPath, configDir } from './paths.ts'
@@ -103,6 +104,12 @@ const addCommand = defineCommand({
     }
     err(`Added '${args.name}'.`)
     err(`Activate it with: claudefob use ${args.name}`)
+    // A secret written into the session collection is gone at the next reboot, while store.json
+    // survives — so warn at the moment it is stored, not after the token has already been lost.
+    if (keyringPersistence() === 'ephemeral') {
+      err('')
+      err(ephemeralKeyringWarning())
+    }
     warnIfHookMissing(resolveShell(args as { shell?: string }), 'add')
   }),
 })
@@ -281,6 +288,14 @@ async function doActivate(args: { name?: string; shell?: string }) {
     throw new KeystoreError((e as Error).message)
   }
   if (secret === null) {
+    // On Linux this is usually not corruption: the secret was written to the in-memory session
+    // collection and lost at reboot. Telling the user to re-add it would just repeat the loss.
+    if (keyringPersistence() === 'ephemeral') {
+      throw new KeystoreError(
+        `Secret for '${name}' is no longer in the keystore.\n\n${ephemeralKeyringWarning()}\n\n` +
+          `  Once a persistent keyring exists, re-add the token:  claudefob remove ${name} && claudefob add ${name}`,
+      )
+    }
     throw new KeystoreError(`Secret for '${name}' is missing from the keystore. Try \`claudefob remove ${name}\` and re-add it.`)
   }
   saveStore(setActive(store, name))
@@ -621,7 +636,7 @@ const exportCommand = defineCommand({
   }),
 })
 
-export const VERSION = '0.2.7'
+export const VERSION = '0.3.0'
 
 /** Same command under another name, hidden from --help so only the canonical name is advertised. */
 function hiddenAlias<T extends { meta?: unknown }>(cmd: T, name: string): T {
