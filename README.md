@@ -58,7 +58,29 @@ claudefob stop                               # deactivate
 | `claudefob remove [<name>] [--yes]` | Delete a token from the keystore and metadata. |
 | `claudefob init [--shell <s>]` | Print the shell hook block to stdout, for you to append to an rc file. Never writes a file itself. |
 | `claudefob guide [--shell <s>]` | Read-only: install steps, rc file scan, removal instructions. |
+| `claudefob update` | Update claudefob using whichever package manager installed it. |
 | `claudefob export --shell <s>` | Internal — called by the shell hook at every shell startup. Not meant to be run by hand. |
+
+`ls` and `rm` are accepted as aliases for `list` and `remove`. `-d` is short for `--description`,
+`-y` for `--yes`.
+
+### Environment variables
+
+| Variable | Effect |
+|---|---|
+| `CLAUDEFOB_NO_UPDATE_CHECK=1` | Disable the update check. Also honours `NO_UPDATE_NOTIFIER` and `CI`. |
+| `CLAUDEFOB_NO_HOOK_CHECK=1` | Suppress the "shell integration is not installed" warning. |
+| `NO_COLOR=1` | Disable colored output. |
+| `CLAUDEFOB_DEBUG=1` | Print diagnostics that are otherwise swallowed. |
+| `XDG_CONFIG_HOME` | Where `store.json` lives (macOS/Linux). |
+
+### Update checks
+
+claudefob checks npm for a newer version at most once every 24 hours, in a detached background
+process, and prints a notice from cache on a later run. It never blocks a command, and it never
+runs on the `claudefob export` path that your shell calls at startup. The request goes to
+`registry.npmjs.org` and exposes your IP address to npm; disable it with
+`CLAUDEFOB_NO_UPDATE_CHECK=1`.
 
 ## How it works
 
