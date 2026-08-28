@@ -13,6 +13,13 @@ export const powershellCodegen: ShellCodegen = {
   unsetEnv(name) {
     return `Remove-Item Env:\\${name} -ErrorAction SilentlyContinue`
   },
+  sourceBlock(scriptPath) {
+    return [
+      '# >>> claudefob >>>',
+      `if (Test-Path ${JSON.stringify(scriptPath)}) { . ${JSON.stringify(scriptPath)} }`,
+      '# <<< claudefob <<<',
+    ].join('\n')
+  },
   hookBlock() {
     const body = [
       "$env:CLAUDEFOB_HOOK = '1'",

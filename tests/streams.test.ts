@@ -72,6 +72,26 @@ describe('stdout/stderr discipline over a real subprocess', () => {
     r.home.cleanup()
   })
 
+  test('init writes the hook script and emits only a source line', () => {
+    const r = run(['init', '--shell', 'posix'])
+    const script = path.join(r.home.storeDir, 'claudefob', 'hook.sh')
+    expect(fs.existsSync(script)).toBe(true)
+    // The rc file gets three lines; the ~50-line block lives in the script instead.
+    expect(r.stdout.trim().split('\n')).toHaveLength(3)
+    expect(r.stdout).toContain(script)
+    expect(fs.readFileSync(script, 'utf8')).toContain('_claudefob_sync')
+    r.home.cleanup()
+  })
+
+  test('init --inline emits the full block and writes no script', () => {
+    const r = run(['init', '--shell', 'posix', '--inline'])
+    const script = path.join(r.home.storeDir, 'claudefob', 'hook.sh')
+    expect(fs.existsSync(script)).toBe(false)
+    expect(r.stdout).toContain('_claudefob_sync')
+    expect(r.stdout.trim().split('\n').length).toBeGreaterThan(20)
+    r.home.cleanup()
+  })
+
   test('export with nothing active: exit 0, empty stdout', () => {
     const r = run(['export', '--shell', 'posix'])
     expect(r.status).toBe(0)

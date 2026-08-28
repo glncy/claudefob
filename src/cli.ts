@@ -3,7 +3,7 @@ import { loadStore, saveStore, findToken, addToken, removeToken, setActive, vali
 import { getKeystore, KeystoreUnavailableError } from './keystore.ts'
 import { codegenFor, detectShell, parseShellFlag, type ShellDialect } from './shell/index.ts'
 import { ensureOnboarding } from './claude-config.ts'
-import { rcCandidates } from './paths.ts'
+import { rcCandidates, hookScriptPath, configDir } from './paths.ts'
 import { selectBackend, AuthUnavailableError } from './auth/index.ts'
 import { emitShellCode, err, errJson } from './ui/out.ts'
 import { runExport, VAR } from './export.ts'
@@ -369,19 +369,39 @@ const removeCommand = defineCommand({
 
 const initCommand = defineCommand({
   meta: { name: 'init', description: 'Print the shell integration block' },
-  args: { shell: { type: 'string' } },
+  args: { shell: { type: 'string' }, inline: { type: 'boolean' } },
   run: guard(async ({ args }) => {
     const shell = resolveShell(args)
-    // Names the detected shell and its usual rc file, but does not imply the user must use that
-    // file — `claudefob init >> ~/.zprofile` is equally valid and the CLI cannot see the redirect.
+    const gen = codegenFor(shell)
     err(`Detected shell: ${shell}. Override with --shell.`)
+
+    // Default: write the hook to a file claudefob owns and emit a one-line block that sources it.
+    // The rc file then never needs editing again — an upgrade rewrites only the script. `--inline`
+    // emits the whole block instead, for anyone who would rather not have a second file.
+    if (!args.inline && gen.sourceBlock) {
+      const scriptPath = hookScriptPath(shell)
+      try {
+        fs.mkdirSync(configDir(), { recursive: true })
+        fs.writeFileSync(scriptPath, gen.hookBlock() + '\n', { mode: 0o644 })
+        err(`Wrote the hook script to ${scriptPath}`)
+        err('The block below goes in a shell startup file — commonly ' + `${suggestedRcFile(shell)}` + '. For example:')
+        err(`  ${installCommandFor(shell)}`)
+        err('It takes effect in any terminal you open afterwards. Upgrades rewrite only the script,')
+        err('so your startup file never needs editing again.')
+        err('Run `claudefob guide` for the full list of startup files and which one to pick.')
+        emitShellCode('\n' + gen.sourceBlock(scriptPath) + '\n')
+        return
+      } catch (e) {
+        debug(e)
+        err(`Could not write ${scriptPath}; emitting the full block inline instead.`)
+      }
+    }
+
     err('The block below goes in a shell startup file — commonly ' + `${suggestedRcFile(shell)}` + '. For example:')
     err(`  ${installCommandFor(shell)}`)
     err('It takes effect in any terminal you open afterwards.')
     err('Run `claudefob guide` for the full list of startup files and which one to pick.')
-    // Padded with blank lines: appended with `>>` this would otherwise butt directly against
-    // whatever the last line of the rc file happens to be.
-    emitShellCode('\n' + codegenFor(shell).hookBlock() + '\n')
+    emitShellCode('\n' + gen.hookBlock() + '\n')
   }),
 })
 
@@ -481,6 +501,18 @@ const updateCommand = defineCommand({
  */
 async function refreshInstalledHooks(assumeYes: boolean): Promise<void> {
   const { spawnSync } = await import('node:child_process')
+
+  // Hook scripts live in claudefob's own config dir, so refreshing them needs no permission and
+  // no rc edit at all. Running `init` from the NEW binary rewrites each one; the rc file just
+  // sources it, so nothing else has to change.
+  for (const d of ['posix', 'fish', 'powershell'] as const) {
+    const scriptPath = hookScriptPath(d)
+    if (!fs.existsSync(scriptPath)) continue
+    const r = spawnSync('claudefob', ['init', '--shell', d], { encoding: 'utf8' })
+    if (r.status === 0) err(`Refreshed ${scriptPath}`)
+    else err(`Could not refresh ${scriptPath}; run \`claudefob init --shell ${d}\` by hand.`)
+  }
+
   const targets: { path: string; text: string }[] = []
   for (const c of rcCandidates()) {
     let text: string
@@ -503,6 +535,9 @@ async function refreshInstalledHooks(assumeYes: boolean): Promise<void> {
   const newBlock = gen.stdout.trim()
 
   for (const t of targets) {
+    // A one-line source block is already self-updating — the script it points at was just
+    // refreshed above, so there is nothing to rewrite in the rc file.
+    if (t.text.includes(hookScriptPath(detectShell()))) continue
     const result = replaceBlocks(t.text, newBlock)
     if (result.replaced === 0 || result.unchanged) continue
     if (!assumeYes) {
@@ -543,7 +578,7 @@ const exportCommand = defineCommand({
   }),
 })
 
-export const VERSION = '0.1.4'
+export const VERSION = '0.2.0'
 
 /** Same command under another name, hidden from --help so only the canonical name is advertised. */
 function hiddenAlias<T extends { meta?: unknown }>(cmd: T, name: string): T {

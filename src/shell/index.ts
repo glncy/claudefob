@@ -7,6 +7,8 @@ import { powershellCodegen } from './powershell.ts'
 export type ShellDialect = 'posix' | 'fish' | 'powershell'
 
 export interface ShellCodegen {
+  /** One-line block for an rc file: sources the hook script claudefob maintains. */
+  sourceBlock?: (scriptPath: string) => string
   id: ShellDialect
   setEnv(name: string, value: string): string
   unsetEnv(name: string): string

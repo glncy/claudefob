@@ -14,8 +14,19 @@ Keychain, Linux Secret Service, Windows Credential Manager) and activates exactl
 npm i -g claudefob
 ```
 
-Then wire up shell integration — append the hook block to your rc file. It takes effect in any
+Then wire up shell integration. `claudefob init` writes the hook to a file it maintains
+(`~/.config/claudefob/hook.sh`) and prints a **three-line** block that sources it — so upgrades
+rewrite only that script and your startup file never needs editing again. It takes effect in any
 terminal you open afterwards.
+
+```sh
+# >>> claudefob >>>
+[ -f "$HOME/.config/claudefob/hook.sh" ] && . "$HOME/.config/claudefob/hook.sh"
+# <<< claudefob <<<
+```
+
+Prefer everything in one place? `claudefob init --inline` emits the whole block instead and writes
+no extra file — you then re-run it after each upgrade.
 
 claudefob detects your shell from the parent process, so `--shell` is never needed. You only
 choose *which file* to append to:

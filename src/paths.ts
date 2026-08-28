@@ -17,6 +17,16 @@ export function storePath(env?: NodeJS.ProcessEnv, platform?: NodeJS.Platform): 
   return path.join(configDir(env, platform), 'store.json')
 }
 
+/** Where claudefob keeps the sourceable hook script it owns (never a user dotfile). */
+export function hookScriptPath(
+  dialect: 'posix' | 'fish' | 'powershell',
+  env?: NodeJS.ProcessEnv,
+  platform?: NodeJS.Platform,
+): string {
+  const ext = dialect === 'fish' ? 'fish' : dialect === 'powershell' ? 'ps1' : 'sh'
+  return path.join(configDir(env, platform), `hook.${ext}`)
+}
+
 export function claudeConfigPath(): string {
   return path.join(os.homedir(), '.claude.json')
 }

@@ -202,3 +202,21 @@ dropped: `claudefob update` may **rewrite a block the user already installed**, 
 `init` emits a leading and trailing blank line around the block, so
 `claudefob init >> ~/.zshrc` cannot butt the fence marker directly against the last existing line
 of the file.
+
+
+## A11. The hook lives in a script claudefob maintains
+
+Pasting ~50 lines into an rc file meant every upgrade required rewriting them in place (A9).
+Instead, `init` now writes the full block to `~/.config/claudefob/hook.<sh|fish|ps1>` and emits a
+three-line rc block that sources it.
+
+- The script is in **claudefob's own config directory**. The rule that claudefob never writes to a
+  user dotfile is unchanged.
+- The source line is guarded on the file existing, so deleting the script cannot break shell
+  startup.
+- The path is quoted, so a config directory containing spaces works.
+- `claudefob update` refreshes the script by running `init` from the newly installed binary. No rc
+  edit and no confirmation is needed, because only claudefob's own file changes.
+- A9's rc-block rewriting is kept for people who installed an inline block before this change, and
+  is skipped when the rc file already contains a source line.
+- `init --inline` keeps the old behaviour for anyone who prefers a single file.
