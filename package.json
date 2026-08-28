@@ -13,8 +13,8 @@
   "license": "MIT",
   "keywords": ["claude", "claude-code", "oauth", "token", "keychain", "keyring", "credential-manager", "cli"],
   "scripts": {
-    "build": "bun build src/cli.ts --target node --outdir dist --external @napi-rs/keyring --define __CLAUDEFOB_TEST__=false --minify --banner '#!/usr/bin/env node' && chmod +x dist/cli.js",
-    "build:test": "bun build src/cli.ts --target node --outdir dist-test --external @napi-rs/keyring --define __CLAUDEFOB_TEST__=true --banner '#!/usr/bin/env node' && chmod +x dist-test/cli.js",
+    "build": "bun build src/cli.ts --target node --outdir dist --external @napi-rs/keyring --define __CLAUDEFOB_TEST__=false --minify --banner '#!/usr/bin/env node' && node -e \"process.platform!=='win32'&&require('fs').chmodSync('dist/cli.js',0o755)\"",
+    "build:test": "bun build src/cli.ts --target node --outdir dist-test --external @napi-rs/keyring --define __CLAUDEFOB_TEST__=true --banner '#!/usr/bin/env node' && node -e \"process.platform!=='win32'&&require('fs').chmodSync('dist-test/cli.js',0o755)\"",
     "pretest": "bun run build:test",
     "test": "bun test",
     "typecheck": "tsc --noEmit"

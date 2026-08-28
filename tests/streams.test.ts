@@ -2,7 +2,7 @@ import { describe, expect, test, beforeAll } from 'bun:test'
 import fs from 'node:fs'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
-import { makeTmpHome } from './helpers/tmpHome.ts'
+import { makeTmpHome, baseTestEnv } from './helpers/tmpHome.ts'
 
 const repoRoot = path.join(import.meta.dir, '..')
 const distTestCli = path.join(repoRoot, 'dist-test', 'cli.js')
@@ -16,12 +16,7 @@ const hasDistTest = fs.existsSync(distTestCli)
 
 function run(args: string[], opts: { env?: Record<string, string | undefined>; input?: string } = {}) {
   const home = makeTmpHome()
-  const env: Record<string, string> = {
-    PATH: process.env.PATH ?? '',
-    HOME: home.home,
-    XDG_CONFIG_HOME: home.configHome,
-    CLAUDEFOB_FAKE_KEYSTORE: home.fakeKeystorePath,
-  }
+  const env: Record<string, string | undefined> = baseTestEnv(home)
   for (const [k, v] of Object.entries(opts.env ?? {})) {
     if (v === undefined) delete env[k]
     else env[k] = v
@@ -94,12 +89,7 @@ describe('stdout/stderr discipline over a real subprocess', () => {
 
   test('full add -> use -> show -> export -> stop cycle via the fake keystore/auth seams', () => {
     const home = makeTmpHome()
-    const env: Record<string, string> = {
-      PATH: process.env.PATH ?? '',
-      HOME: home.home,
-      XDG_CONFIG_HOME: home.configHome,
-      CLAUDEFOB_FAKE_KEYSTORE: home.fakeKeystorePath,
-    }
+    const env: Record<string, string | undefined> = baseTestEnv(home)
     const runIn = (args: string[], input?: string) =>
       spawnSync('node', [distTestCli, ...args], { env, input, encoding: 'utf8' })
 
@@ -150,12 +140,7 @@ describe('stdout/stderr discipline over a real subprocess', () => {
 
   test('use on a record whose secret is missing from the keystore: exit 4, store/claude.json byte-identical', () => {
     const home = makeTmpHome()
-    const env: Record<string, string> = {
-      PATH: process.env.PATH ?? '',
-      HOME: home.home,
-      XDG_CONFIG_HOME: home.configHome,
-      CLAUDEFOB_FAKE_KEYSTORE: home.fakeKeystorePath,
-    }
+    const env: Record<string, string | undefined> = baseTestEnv(home)
     const store = {
       version: 1,
       active: null,
@@ -185,12 +170,7 @@ describe('stdout/stderr discipline over a real subprocess', () => {
 
   test('remove against a throwing keystore: exit 4, store byte-identical', () => {
     const home = makeTmpHome()
-    const env: Record<string, string> = {
-      PATH: process.env.PATH ?? '',
-      HOME: home.home,
-      XDG_CONFIG_HOME: home.configHome,
-      CLAUDEFOB_FAKE_KEYSTORE: '__THROW__',
-    }
+    const env: Record<string, string | undefined> = { ...baseTestEnv(home), CLAUDEFOB_FAKE_KEYSTORE: '__THROW__' }
     const store = {
       version: 1,
       active: null,
