@@ -11,6 +11,9 @@ import { UsageError, AuthError, KeystoreError, reportAndExit } from './ui/errors
 import { selectToken, passwordPrompt, confirmPrompt, isCancelled, requireTTY, note } from './ui/prompts.ts'
 import { renderTable } from './ui/table.ts'
 import { colors } from './ui/colors.ts'
+import { unknownTokenMessage } from './suggest.ts'
+import { warnIfHookMissing } from './hook-hint.ts'
+import { maybeNotifyUpdate, detectInstallMethod, updateCommandFor, probe } from './update-check.ts'
 import { scanFenceBlocks } from './rc-scan.ts'
 import fs from 'node:fs'
 
@@ -59,7 +62,8 @@ const addCommand = defineCommand({
   meta: { name: 'add', description: 'Add a new token to the keystore' },
   args: {
     name: { type: 'positional', required: true },
-    description: { type: 'string' },
+    description: { type: 'string', alias: 'd' },
+    shell: { type: 'string' },
   },
   run: guard(async ({ args }) => {
     validateName(args.name)
@@ -97,6 +101,8 @@ const addCommand = defineCommand({
       throw e
     }
     err(`Added '${args.name}'.`)
+    err(`Activate it with: claudefob use ${args.name}`)
+    warnIfHookMissing(resolveShell(args as { shell?: string }), 'add')
   }),
 })
 
@@ -157,7 +163,7 @@ const showCommand = defineCommand({
       name = await pickTokenName('Select a token to reveal')
       if (!name) return // cancelled: exit 0, no auth challenge
     } else if (!findToken(store, name)) {
-      throw new UsageError(`No token named '${name}'.`)
+      throw new UsageError(unknownTokenMessage(name, store.tokens.map((t) => t.name)))
     }
 
     let backend
@@ -262,7 +268,7 @@ async function doActivate(args: { name?: string; shell?: string }) {
   }
   const rec = findToken(store, name)
   if (!rec) {
-    throw new UsageError(`No token named '${name}'.`)
+    throw new UsageError(unknownTokenMessage(name, store.tokens.map((t) => t.name)))
   }
   const keystore = getKeystore()
   let secret: string | null
@@ -287,6 +293,7 @@ async function doActivate(args: { name?: string; shell?: string }) {
   }
   err(`Activated '${name}'.`)
   emitShellCode(codegenFor(shell).setEnv(VAR, secret))
+  warnIfHookMissing(shell, 'activate')
 }
 
 const useCommand = defineCommand({
@@ -316,7 +323,7 @@ const removeCommand = defineCommand({
   meta: { name: 'remove', description: 'Remove a stored token' },
   args: {
     name: { type: 'positional', required: false },
-    yes: { type: 'boolean' },
+    yes: { type: 'boolean', alias: 'y' },
     shell: { type: 'string' },
   },
   run: guard(async ({ args }) => {
@@ -329,7 +336,7 @@ const removeCommand = defineCommand({
     }
     const rec = findToken(store, name)
     if (!rec) {
-      throw new UsageError(`No token named '${name}'.`)
+      throw new UsageError(unknownTokenMessage(name, store.tokens.map((t) => t.name)))
     }
     if (!args.yes) {
       requireTTY()
@@ -421,6 +428,34 @@ const guideCommand = defineCommand({
   }),
 })
 
+const updateCommand = defineCommand({
+  meta: { name: 'update', description: 'Update claudefob to the latest version' },
+  args: { yes: { type: 'boolean', alias: 'y' } },
+  run: guard(async ({ args }) => {
+    const method = detectInstallMethod()
+    const cmd = updateCommandFor(method)
+    if (method === 'unknown' || !process.stdin.isTTY) {
+      err(`To update claudefob, run:\n  ${cmd}`)
+      return
+    }
+    if (!args.yes) {
+      const ok = await confirmPrompt(`Installed via ${method}. Run \`${cmd}\`?`)
+      if (isCancelled(ok) || !ok) {
+        err('Cancelled.')
+        return
+      }
+    }
+    const { spawnSync } = await import('node:child_process')
+    const parts = cmd.split(' ')
+    const bin = parts[0] as string
+    const res = spawnSync(bin, parts.slice(1), { stdio: 'inherit' })
+    if (res.status !== 0) {
+      err(`Update command failed. Run it manually:\n  ${cmd}`)
+      process.exit(1)
+    }
+  }),
+})
+
 const exportCommand = defineCommand({
   meta: { name: 'export', description: 'Internal: emit shell code for current state', hidden: true },
   args: { shell: { type: 'string' } },
@@ -436,10 +471,20 @@ const exportCommand = defineCommand({
   }),
 })
 
+export const VERSION = '0.1.0'
+
+/** Same command under another name, hidden from --help so only the canonical name is advertised. */
+function hiddenAlias<T extends { meta?: unknown }>(cmd: T, name: string): T {
+  return {
+    ...cmd,
+    meta: { ...((cmd.meta ?? {}) as Record<string, unknown>), name, hidden: true },
+  } as T
+}
+
 const main = defineCommand({
   meta: {
     name: 'claudefob',
-    version: '0.1.0',
+    version: VERSION,
     description: 'Unofficial CLI to store multiple Claude Code OAuth tokens and activate one at a time.',
   },
   args: {
@@ -456,20 +501,47 @@ const main = defineCommand({
     remove: removeCommand,
     init: initCommand,
     guide: guideCommand,
+    update: updateCommand,
     export: exportCommand,
+    // ADDENDUM A1: `ls`/`rm` are accepted spellings; `list`/`remove` stay canonical and are the
+    // only names shown in --help or printed in hints and error messages.
+    ls: hiddenAlias(listCommand, 'ls'),
+    rm: hiddenAlias(removeCommand, 'rm'),
   },
   run: guard(async ({ args, rawArgs }) => {
     // citty invokes the parent's `run` unconditionally, even after dispatching to a matched
     // subcommand — so this only performs the bare-invocation activation picker when no known
     // subcommand token is present in the raw args; otherwise the subcommand already ran.
-    const subNames = ['add', 'list', 'show', 'status', 'use', 'stop', 'remove', 'init', 'guide', 'export']
+    const subNames = ['add', 'list', 'ls', 'show', 'status', 'use', 'stop', 'remove', 'rm', 'init', 'guide', 'update', 'export']
     if (rawArgs.some((a) => subNames.includes(a))) return
     await doActivate({ shell: args.shell as string | undefined })
   }),
 })
 
+const HELP_EXAMPLES = [
+  '',
+  'EXAMPLES',
+  '  claudefob init >> ~/.zshrc     Install the shell integration (one time)',
+  '  claudefob add work -d "day job"  Store a token',
+  '  claudefob                      Pick a token to activate',
+  '  claudefob use work             Activate a token by name',
+  '  claudefob status               Show what is active in this shell',
+  '  claudefob stop                 Deactivate',
+  '  claudefob show work            Reveal a token (asks for OS authentication)',
+  '  claudefob guide                Platform setup and removal instructions',
+  '',
+  'Set CLAUDEFOB_NO_UPDATE_CHECK=1 to disable update checks, NO_COLOR=1 to disable color.',
+].join('\n')
+
 async function start() {
   const argv = process.argv.slice(2)
+
+  // Detached background probe for the update check (ADDENDUM A3). Never prints anything.
+  if (argv[0] === '__update-probe') {
+    await probe(new Date().toISOString())
+    process.exit(0)
+  }
+
   const isExport = argv[0] === 'export'
   if (isExport) {
     // export has its own outermost guard: swallow everything, always exit 0.
@@ -483,6 +555,20 @@ async function start() {
     process.exit(0)
   }
 
+  // ADDENDUM A3: the notice prints from cache on exit, so it never delays the command. Registered
+  // as an exit hook because several commands call process.exit() directly.
+  const command = argv.find((a) => !a.startsWith('-')) ?? ''
+  const json = argv.includes('--json')
+  process.on('exit', () => {
+    try {
+      maybeNotifyUpdate(VERSION, { command, json })
+    } catch {
+      // an update notice must never change the outcome of a command
+    }
+  })
+
+  const wantsHelp = argv.length === 0 || argv.includes('--help') || argv.includes('-h')
+
   try {
     await runMain(main, {
       rawArgs: argv,
@@ -491,6 +577,7 @@ async function start() {
   } catch (e) {
     reportAndExit(e)
   }
+  if (wantsHelp && argv.includes('--help')) err(HELP_EXAMPLES)
 }
 
 // citty's default renderer writes --help/--version to stdout via console.log. Route console.log to

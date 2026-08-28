@@ -16,6 +16,8 @@ jobs:
         #                         bundle in which CLAUDEFOB_FAKE_* hooks are live
       - run: bun test # unit tests (pure) + subprocess tests driving dist-test/cli.js
       - run: bun run build # dist/cli.js — the release bundle, hooks dead-code-eliminated
+      - name: startup budget (ADDENDUM A5)
+        run: node scripts/startup-budget.mjs
       - name: integration (macos)
         if: matrix.os == 'macos-latest'
         timeout-minutes: 5

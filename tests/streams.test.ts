@@ -12,7 +12,10 @@ const distTestCli = path.join(repoRoot, 'dist-test', 'cli.js')
 if (!fs.existsSync(distTestCli)) {
   spawnSync('bun', ['run', 'build:test'], { cwd: repoRoot, stdio: 'ignore' })
 }
-const hasDistTest = fs.existsSync(distTestCli)
+if (!fs.existsSync(distTestCli)) {
+  // Fail loudly rather than skipping: a silently skipped subprocess suite reads as "passing".
+  throw new Error('dist-test/cli.js is missing and `bun run build:test` did not produce it')
+}
 
 function run(args: string[], opts: { env?: Record<string, string | undefined>; input?: string } = {}) {
   const home = makeTmpHome()
@@ -30,11 +33,6 @@ function run(args: string[], opts: { env?: Record<string, string | undefined>; i
 }
 
 describe('stdout/stderr discipline over a real subprocess', () => {
-  if (!hasDistTest) {
-    test.skip('dist-test/cli.js not built — run `bun run build:test` first', () => {})
-    return
-  }
-
   test('list on an empty store: empty stdout', () => {
     const r = run(['list'])
     expect(r.stdout).toBe('')
@@ -261,12 +259,12 @@ describe('CLAUDEFOB_FAKE_AUTH is inert against unbuilt source and the release bu
   if (!fs.existsSync(releasePath)) {
     spawnSync('bun', ['run', 'build'], { cwd: repoRoot, stdio: 'ignore' })
   }
-  const hasRelease = fs.existsSync(releasePath)
+  if (!fs.existsSync(releasePath)) {
+    throw new Error('dist/cli.js is missing and `bun run build` did not produce it')
+  }
 
-  test.if(hasRelease)('release bundle does not contain the string CLAUDEFOB_FAKE_AUTH', () => {
+  test('release bundle does not contain the string CLAUDEFOB_FAKE_AUTH', () => {
     const text = fs.readFileSync(releasePath, 'utf8')
     expect(text).not.toContain('CLAUDEFOB_FAKE_AUTH')
   })
-
-  test.if(!hasRelease)('skipped: dist/cli.js not built — run `bun run build` first', () => {})
 })
