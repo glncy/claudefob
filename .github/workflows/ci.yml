@@ -24,6 +24,8 @@ jobs:
         run: brew install fish
       - name: hook block syntax on every shell available here
         run: node scripts/hook-syntax.mjs
+      - name: hook block behaviour — source it in each real shell and check the variable
+        run: node scripts/hook-behavior.mjs
       - name: startup budget (ADDENDUM A5)
         run: node scripts/startup-budget.mjs
       - name: integration (macos)
