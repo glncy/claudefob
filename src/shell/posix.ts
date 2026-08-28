@@ -14,11 +14,8 @@ export const posixCodegen: ShellCodegen = {
     return `unset ${name}`
   },
   sourceBlock(scriptPath) {
-    return [
-      '# >>> claudefob >>>',
-      `[ -f ${JSON.stringify(scriptPath)} ] && . ${JSON.stringify(scriptPath)}`,
-      '# <<< claudefob <<<',
-    ].join('\n')
+    const p = quote(scriptPath)
+    return ['# >>> claudefob >>>', `[ -f ${p} ] && . ${p}`, '# <<< claudefob <<<'].join('\n')
   },
   hookBlock() {
     // Everything inside the guard: if claudefob is not on PATH — uninstalled, or (under a version

@@ -14,11 +14,10 @@ export const powershellCodegen: ShellCodegen = {
     return `Remove-Item Env:\\${name} -ErrorAction SilentlyContinue`
   },
   sourceBlock(scriptPath) {
-    return [
-      '# >>> claudefob >>>',
-      `if (Test-Path ${JSON.stringify(scriptPath)}) { . ${JSON.stringify(scriptPath)} }`,
-      '# <<< claudefob <<<',
-    ].join('\n')
+    // PowerShell does not treat backslash as an escape, so the path is single-quoted with ''
+    // doubling — JSON-style escaping would leave literal double backslashes in a Windows path.
+    const p = quote(scriptPath)
+    return ['# >>> claudefob >>>', `if (Test-Path ${p}) { . ${p} }`, '# <<< claudefob <<<'].join('\n')
   },
   hookBlock() {
     const body = [

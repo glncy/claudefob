@@ -15,11 +15,8 @@ export const fishCodegen: ShellCodegen = {
     return `set -e ${name}`
   },
   sourceBlock(scriptPath) {
-    return [
-      '# >>> claudefob >>>',
-      `test -f ${JSON.stringify(scriptPath)}; and source ${JSON.stringify(scriptPath)}`,
-      '# <<< claudefob <<<',
-    ].join('\n')
+    const p = quote(scriptPath)
+    return ['# >>> claudefob >>>', `test -f ${p}; and source ${p}`, '# <<< claudefob <<<'].join('\n')
   },
   hookBlock() {
     return [
