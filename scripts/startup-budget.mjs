@@ -6,15 +6,17 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 
 const CLI = path.join(process.cwd(), 'dist', 'cli.js')
-const RUNS = 7
+const RUNS = 9
 const BUDGET_MS = 100
 
 const home = mkdtempSync(path.join(tmpdir(), 'claudefob-bench-'))
 const env = { ...process.env, XDG_CONFIG_HOME: home, APPDATA: home, CLAUDEFOB_NO_UPDATE_CHECK: '1' }
 
-function median(xs) {
-  const s = [...xs].sort((a, b) => a - b)
-  return s[Math.floor(s.length / 2)]
+// The minimum, not the median: it reflects the true cost of the work, and is immune to a runner
+// pausing mid-sample. A Windows run once measured 412ms against a 47ms median for the same commit
+// minutes earlier — noise, not a regression.
+function best(xs) {
+  return Math.min(...xs)
 }
 
 function time(args) {
@@ -26,14 +28,14 @@ function time(args) {
     if (r.status !== 0) throw new Error(`command failed: ${args.join(' ')} (exit ${r.status})`)
     runs.push(Number(t1 - t0) / 1e6)
   }
-  return median(runs)
+  return best(runs)
 }
 
 const baseline = time(['-e', ''])
 const withCli = time([CLI, 'export', '--shell', 'posix'])
 const overhead = withCli - baseline
 
-console.log(`runtime baseline: ${baseline.toFixed(1)}ms`)
+console.log(`runtime baseline: ${baseline.toFixed(1)}ms (best of ${RUNS})`)
 console.log(`claudefob export: ${withCli.toFixed(1)}ms`)
 console.log(`overhead:         ${overhead.toFixed(1)}ms (budget ${BUDGET_MS}ms)`)
 
