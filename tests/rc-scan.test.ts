@@ -66,3 +66,16 @@ describe('rc file fenced-block scan', () => {
     }
   })
 })
+
+describe('init warns about an existing block rather than silently duplicating', () => {
+  test('the warning names every block and offers the removal command', () => {
+    // init cannot see the shell redirect, so it cannot know where its stdout is going; reading the
+    // known startup files is the only way it can notice an existing install.
+    const src = fs.readFileSync(path.join(import.meta.dir, '..', 'src', 'cli.ts'), 'utf8')
+    const block = src.match(/const initCommand[\s\S]*?\n\}\)\n/)
+    expect(block).not.toBeNull()
+    expect(block![0]).toContain('already has a claudefob block')
+    expect(block![0]).toContain('Appending again would duplicate it')
+    expect(block![0]).toContain('scanFenceBlocks')
+  })
+})

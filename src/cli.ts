@@ -375,6 +375,26 @@ const initCommand = defineCommand({
     const gen = codegenFor(shell)
     err(`Detected shell: ${shell}. Override with --shell.`)
 
+    // init cannot see the shell's redirect, so it cannot know where its output is going. It can
+    // still read the known startup files and warn when a block is already installed — otherwise
+    // re-running it silently appends a second copy.
+    for (const c of rcCandidates()) {
+      let text: string
+      try {
+        text = fs.readFileSync(c.path, 'utf8')
+      } catch {
+        continue
+      }
+      const blocks = scanFenceBlocks(text)
+      if (blocks.length > 0) {
+        const where = blocks.map((b) => `${b.start}-${b.end}`).join(', ')
+        err('')
+        err(`Note: ${c.path} already has a claudefob block (lines ${where}).`)
+        err('Appending again would duplicate it. To replace it instead:')
+        err(`  sed -i '' '/# >>> claudefob >>>/,/# <<< claudefob <<</d' ${c.path}`)
+      }
+    }
+
     // Default: write the hook to a file claudefob owns and emit a one-line block that sources it.
     // The rc file then never needs editing again — an upgrade rewrites only the script. `--inline`
     // emits the whole block instead, for anyone who would rather not have a second file.
@@ -395,7 +415,7 @@ const initCommand = defineCommand({
         err(`  ${gen.id === 'powershell' ? `. ${gen.quote(scriptPath)}` : `. ${gen.quote(scriptPath)}`}`)
         err('')
         err('Run `claudefob guide` for the full list of startup files and which one to pick.')
-        emitShellCode('\n' + gen.sourceBlock(scriptPath) + '\n')
+        emitShellCode('\n' + gen.sourceBlock(scriptPath))
         return
       } catch (e) {
         debug(e)
@@ -407,7 +427,7 @@ const initCommand = defineCommand({
     err(`  ${installCommandFor(shell)}`)
     err('It takes effect in any terminal you open afterwards.')
     err('Run `claudefob guide` for the full list of startup files and which one to pick.')
-    emitShellCode('\n' + gen.hookBlock() + '\n')
+    emitShellCode('\n' + gen.hookBlock())
   }),
 })
 
@@ -584,7 +604,7 @@ const exportCommand = defineCommand({
   }),
 })
 
-export const VERSION = '0.2.1'
+export const VERSION = '0.2.2'
 
 /** Same command under another name, hidden from --help so only the canonical name is advertised. */
 function hiddenAlias<T extends { meta?: unknown }>(cmd: T, name: string): T {

@@ -68,8 +68,20 @@ describe('stdout/stderr discipline over a real subprocess', () => {
     const r = run(['init', '--shell', 'posix'])
     expect(r.status).toBe(0)
     expect(r.stdout.startsWith('\n# >>> claudefob >>>')).toBe(true)
-    expect(r.stdout.endsWith('# <<< claudefob <<<\n\n')).toBe(true)
+    // Exactly one trailing newline, not a blank line: padding both sides made repeated
+    // `claudefob init >> rc` runs stack blank lines in the file.
+    expect(r.stdout.endsWith('# <<< claudefob <<<\n')).toBe(true)
+    expect(r.stdout.endsWith('\n\n')).toBe(false)
     r.home.cleanup()
+  })
+
+  test('appending init twice yields exactly one blank line between blocks', () => {
+    const r1 = run(['init', '--shell', 'posix'])
+    const r2 = run(['init', '--shell', 'posix'])
+    const combined = 'existing line\n' + r1.stdout + r2.stdout
+    expect(combined).not.toContain('\n\n\n')
+    r1.home.cleanup()
+    r2.home.cleanup()
   })
 
   test('init writes the hook script and emits only a source line', () => {
