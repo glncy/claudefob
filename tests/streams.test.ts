@@ -64,15 +64,33 @@ describe('stdout/stderr discipline over a real subprocess', () => {
     r.home.cleanup()
   })
 
-  test('init pads the block with blank lines so `>>` never jams it onto existing content', () => {
-    const r = run(['init', '--shell', 'posix'])
-    expect(r.status).toBe(0)
-    expect(r.stdout.startsWith('\n# >>> claudefob >>>')).toBe(true)
-    // Exactly one trailing newline, not a blank line: padding both sides made repeated
-    // `claudefob init >> rc` runs stack blank lines in the file.
-    expect(r.stdout.endsWith('# <<< claudefob <<<\n')).toBe(true)
-    expect(r.stdout.endsWith('\n\n')).toBe(false)
-    r.home.cleanup()
+  test('init pads only when the target file does not already end in a blank line', () => {
+    const home = makeTmpHome()
+    const env = baseTestEnv(home)
+    const rc = path.join(home.home, '.zshrc')
+
+    // Ends with content: a blank line is needed to separate the block from it.
+    fs.writeFileSync(rc, 'export FOO=1\n')
+    const padded = spawnSync('node', [distTestCli, 'init', '--shell', 'posix', '--rc', rc, '--force'], {
+      env,
+      encoding: 'utf8',
+    })
+    expect(padded.stdout.startsWith('\n# >>> claudefob >>>')).toBe(true)
+
+    // Already ends with a blank line: adding another stacks them, which is the bug this fixes.
+    fs.writeFileSync(rc, 'export FOO=1\n\n')
+    const unpadded = spawnSync('node', [distTestCli, 'init', '--shell', 'posix', '--rc', rc, '--force'], {
+      env,
+      encoding: 'utf8',
+    })
+    expect(unpadded.stdout.startsWith('# >>> claudefob >>>')).toBe(true)
+
+    // Each output must be checked against the file it was generated for: exactly one blank line
+    // ends up separating the block from what came before, in both cases.
+    expect(('export FOO=1\n' + padded.stdout).includes('\n\n\n')).toBe(false)
+    expect(('export FOO=1\n\n' + unpadded.stdout).includes('\n\n\n')).toBe(false)
+    expect(padded.stdout.endsWith('# <<< claudefob <<<\n')).toBe(true)
+    home.cleanup()
   })
 
   test('appending init twice yields exactly one blank line between blocks', () => {
