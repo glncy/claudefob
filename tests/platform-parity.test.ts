@@ -67,3 +67,24 @@ describe('hook block parity across every supported shell', () => {
     expect(codegenFor('powershell').hookBlock()).not.toMatch(/Write-Host/)
   })
 })
+
+describe('fish handles multi-line shell code correctly', () => {
+  test('every fish eval of claudefob output pipes through `string collect`', () => {
+    // fish splits command substitution on newlines into separate arguments. Without `string
+    // collect` a two-line export was flattened into one command and the token absorbed the
+    // following line — CLAUDE_CODE_OAUTH_TOKEN came out as
+    // "sk-ant-... set -gx CLAUDEFOB_APPLIED work".
+    const b = codegenFor('fish').hookBlock()
+    const evals = b.split('\n').filter((l) => l.includes('claudefob export --shell fish'))
+    expect(evals.length).toBeGreaterThan(0)
+    for (const line of evals) {
+      expect(line).toContain('string collect')
+    }
+  })
+
+  test('export emits more than one line, which is why this matters', () => {
+    const b = codegenFor('fish')
+    const two = [b.setEnv('A', 'x'), b.setEnv('B', 'y')].join('\n')
+    expect(two.split('\n')).toHaveLength(2)
+  })
+})

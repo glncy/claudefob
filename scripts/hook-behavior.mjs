@@ -52,6 +52,9 @@ function makeEnv(tag) {
   fs.mkdirSync(bin, { recursive: true })
   if (isWin) {
     fs.writeFileSync(path.join(bin, 'claudefob.cmd'), `@echo off\r\n"${process.execPath}" "${CLI}" %*\r\n`)
+    // npm also installs an extensionless shell script for Git Bash / MSYS, which resolves
+    // `command -v claudefob` there; without it the guard correctly finds nothing.
+    fs.writeFileSync(path.join(bin, 'claudefob'), `#!/bin/sh\nexec "${process.execPath.replace(/\\/g, '/')}" "${CLI.replace(/\\/g, '/')}" "$@"\n`, { mode: 0o755 })
   } else {
     const shim = path.join(bin, 'claudefob')
     fs.writeFileSync(shim, `#!/bin/sh\nexec "${process.execPath}" "${CLI}" "$@"\n`, { mode: 0o755 })
