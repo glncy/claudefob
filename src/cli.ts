@@ -369,15 +369,16 @@ const removeCommand = defineCommand({
 
 const initCommand = defineCommand({
   meta: { name: 'init', description: 'Print the shell integration block' },
-  args: { shell: { type: 'string' }, inline: { type: 'boolean' } },
+  args: { shell: { type: 'string' }, inline: { type: 'boolean' }, force: { type: 'boolean' } },
   run: guard(async ({ args }) => {
     const shell = resolveShell(args)
     const gen = codegenFor(shell)
     err(`Detected shell: ${shell}. Override with --shell.`)
 
-    // init cannot see the shell's redirect, so it cannot know where its output is going. It can
-    // still read the known startup files and warn when a block is already installed — otherwise
-    // re-running it silently appends a second copy.
+    // init cannot see the shell's redirect, so it cannot know where its output is going. It reads
+    // the known startup files instead and refuses when a block is already installed — a warning
+    // alone still let `claudefob init >> rc` append a silent duplicate.
+    const installed: { path: string; where: string }[] = []
     for (const c of rcCandidates()) {
       let text: string
       try {
@@ -387,12 +388,22 @@ const initCommand = defineCommand({
       }
       const blocks = scanFenceBlocks(text)
       if (blocks.length > 0) {
-        const where = blocks.map((b) => `${b.start}-${b.end}`).join(', ')
-        err('')
-        err(`Note: ${c.path} already has a claudefob block (lines ${where}).`)
-        err('Appending again would duplicate it. To replace it instead:')
-        err(`  sed -i '' '/# >>> claudefob >>>/,/# <<< claudefob <<</d' ${c.path}`)
+        installed.push({ path: c.path, where: blocks.map((b) => `${b.start}-${b.end}`).join(', ') })
       }
+    }
+    if (installed.length > 0 && !args.force) {
+      err('')
+      err('claudefob is already installed in:')
+      for (const i of installed) err(`  ${i.path}  (lines ${i.where})`)
+      err('')
+      err('Appending again would duplicate the block. To replace it:')
+      for (const i of installed) {
+        err(`  sed -i '' '/# >>> claudefob >>>/,/# <<< claudefob <<</d' ${i.path}`)
+      }
+      err(`  ${installCommandFor(shell)}`)
+      err('')
+      err('Installing into an additional shell is a real case — pass --force for that.')
+      process.exit(2)
     }
 
     // Default: write the hook to a file claudefob owns and emit a one-line block that sources it.
@@ -411,8 +422,8 @@ const initCommand = defineCommand({
         err('')
         // A child process cannot modify its parent shell, and with `>>` its stdout goes to the rc
         // file anyway — so activating the current shell has to be one command the user runs.
-        err('To activate it in THIS terminal without opening a new one:')
-        err(`  ${gen.id === 'powershell' ? `. ${gen.quote(scriptPath)}` : `. ${gen.quote(scriptPath)}`}`)
+        err('To activate it in THIS terminal without opening a new one (note: source it, do not run it):')
+        err(`  ${gen.id === 'powershell' ? '. ' : 'source '}${gen.quote(scriptPath)}`)
         err('')
         err('Run `claudefob guide` for the full list of startup files and which one to pick.')
         emitShellCode('\n' + gen.sourceBlock(scriptPath))
@@ -604,7 +615,7 @@ const exportCommand = defineCommand({
   }),
 })
 
-export const VERSION = '0.2.2'
+export const VERSION = '0.2.3'
 
 /** Same command under another name, hidden from --help so only the canonical name is advertised. */
 function hiddenAlias<T extends { meta?: unknown }>(cmd: T, name: string): T {

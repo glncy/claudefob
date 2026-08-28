@@ -28,8 +28,11 @@ terminal you open afterwards.
 To activate it in the terminal you are already in, without opening a new one:
 
 ```sh
-. ~/.config/claudefob/hook.sh
+source ~/.config/claudefob/hook.sh
 ```
+
+Source it — do not run it. The script is not executable on purpose: executing it would spawn a
+child shell that exits immediately, changing nothing in your session.
 
 `init` prints that exact line for you. It is needed only once, at install time — a child process
 cannot modify its parent shell, and with `>>` the block goes to your rc file rather than to the

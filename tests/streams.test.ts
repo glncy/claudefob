@@ -84,6 +84,44 @@ describe('stdout/stderr discipline over a real subprocess', () => {
     r2.home.cleanup()
   })
 
+  test('init refuses to append a second block, and writes nothing to stdout when it does', () => {
+    const home = makeTmpHome()
+    const env = baseTestEnv(home)
+    const rc = path.join(home.home, '.zshrc')
+    const first = spawnSync('node', [distTestCli, 'init', '--shell', 'posix'], { env, encoding: 'utf8' })
+    expect(first.status).toBe(0)
+    fs.writeFileSync(rc, first.stdout)
+
+    const second = spawnSync('node', [distTestCli, 'init', '--shell', 'posix'], { env, encoding: 'utf8' })
+    expect(second.status).toBe(2)
+    // Critical: with `claudefob init >> rc` the shell appends stdout regardless of exit code, so
+    // refusing is only effective if stdout is empty.
+    expect(second.stdout).toBe('')
+    expect(second.stderr).toContain('already installed')
+    home.cleanup()
+  })
+
+  test('init --force appends anyway, for installing into a second shell', () => {
+    const home = makeTmpHome()
+    const env = baseTestEnv(home)
+    const rc = path.join(home.home, '.zshrc')
+    const first = spawnSync('node', [distTestCli, 'init', '--shell', 'posix'], { env, encoding: 'utf8' })
+    fs.writeFileSync(rc, first.stdout)
+    const forced = spawnSync('node', [distTestCli, 'init', '--shell', 'posix', '--force'], { env, encoding: 'utf8' })
+    expect(forced.status).toBe(0)
+    expect(forced.stdout).toContain('>>> claudefob >>>')
+    home.cleanup()
+  })
+
+  test('the activate hint says to source the script, not execute it', () => {
+    // The script is mode 0644 and meant to be sourced; running it spawns a child that exits and
+    // changes nothing, which surfaced in the wild as "permission denied".
+    const r = run(['init', '--shell', 'posix'])
+    expect(r.stderr).toContain('source it, do not run it')
+    expect(r.stderr).toMatch(/source '.*hook\.sh'/)
+    r.home.cleanup()
+  })
+
   test('init writes the hook script and emits only a source line', () => {
     const r = run(['init', '--shell', 'posix'])
     const script = path.join(r.home.storeDir, 'claudefob', 'hook.sh')
@@ -99,7 +137,7 @@ describe('stdout/stderr discipline over a real subprocess', () => {
     const r = run(['init', '--shell', 'posix'])
     const script = path.join(r.home.storeDir, 'claudefob', 'hook.sh')
     expect(r.stderr).toContain('To activate it in THIS terminal')
-    expect(r.stderr).toContain(`. '${script}'`)
+    expect(r.stderr).toContain(`source '${script}'`)
     // The instruction is guidance, so it must not land on stdout and get appended to an rc file.
     expect(r.stdout).not.toContain('THIS terminal')
     r.home.cleanup()
