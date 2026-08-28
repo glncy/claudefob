@@ -6,18 +6,32 @@
   "bin": {
     "claudefob": "./dist/cli.js"
   },
-  "files": ["dist", "README.md", "LICENSE"],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "engines": {
     "node": ">=18"
   },
   "license": "MIT",
-  "keywords": ["claude", "claude-code", "oauth", "token", "keychain", "keyring", "credential-manager", "cli"],
+  "keywords": [
+    "claude",
+    "claude-code",
+    "oauth",
+    "token",
+    "keychain",
+    "keyring",
+    "credential-manager",
+    "cli"
+  ],
   "scripts": {
     "build": "bun build src/cli.ts --target node --outdir dist --external @napi-rs/keyring --define __CLAUDEFOB_TEST__=false --minify --banner '#!/usr/bin/env node' && node -e \"process.platform!=='win32'&&require('fs').chmodSync('dist/cli.js',0o755)\"",
     "build:test": "bun build src/cli.ts --target node --outdir dist-test --external @napi-rs/keyring --define __CLAUDEFOB_TEST__=true --banner '#!/usr/bin/env node' && node -e \"process.platform!=='win32'&&require('fs').chmodSync('dist-test/cli.js',0o755)\"",
     "pretest": "bun run build:test",
     "test": "bun test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "bun run build"
   },
   "dependencies": {
     "@clack/prompts": "^1.7.0",
@@ -29,5 +43,14 @@
     "@types/node": "^26.4.0",
     "bun-types": "^1.4.0",
     "typescript": "^7.0.2"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/glncy/claudefob.git"
+  },
+  "homepage": "https://github.com/glncy/claudefob#readme",
+  "bugs": {
+    "url": "https://github.com/glncy/claudefob/issues"
+  },
+  "author": "glncy"
 }
