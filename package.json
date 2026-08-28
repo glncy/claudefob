@@ -1,6 +1,6 @@
 {
   "name": "claudefob",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Unofficial CLI to store multiple Claude Code OAuth tokens in your OS keystore and switch between them. Not affiliated with Anthropic.",
   "type": "module",
   "bin": {
