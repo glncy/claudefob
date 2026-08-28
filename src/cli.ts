@@ -1,0 +1,503 @@
+import { defineCommand, runMain } from 'citty'
+import { loadStore, saveStore, findToken, addToken, removeToken, setActive, validateName, validateDescription, last4, mask, type TokenRecord } from './store.ts'
+import { getKeystore, KeystoreUnavailableError } from './keystore.ts'
+import { codegenFor, detectShell, parseShellFlag, type ShellDialect } from './shell/index.ts'
+import { ensureOnboarding } from './claude-config.ts'
+import { rcCandidates } from './paths.ts'
+import { selectBackend, AuthUnavailableError } from './auth/index.ts'
+import { emitShellCode, err, errJson } from './ui/out.ts'
+import { runExport, VAR } from './export.ts'
+import { UsageError, AuthError, KeystoreError, reportAndExit } from './ui/errors.ts'
+import { selectToken, passwordPrompt, confirmPrompt, isCancelled, requireTTY, note } from './ui/prompts.ts'
+import { renderTable } from './ui/table.ts'
+import { colors } from './ui/colors.ts'
+import fs from 'node:fs'
+
+// citty's runMain catches everything thrown from a command's run() itself and always exits with
+// code 1, so our exit-code taxonomy (UsageError=2, AuthError=3, KeystoreError=4) must be enforced
+// from inside each command, not via runMain's outer catch. This wrapper does that.
+function guard<A extends unknown[]>(fn: (...a: A) => Promise<void>): (...a: A) => Promise<void> {
+  return async (...a: A) => {
+    try {
+      await fn(...a)
+    } catch (e) {
+      reportAndExit(e)
+    }
+  }
+}
+
+function resolveShell(args: { shell?: string }): ShellDialect {
+  if (args.shell) return parseShellFlag(args.shell)
+  return detectShell()
+}
+
+function debug(e: unknown): void {
+  if (process.env.CLAUDEFOB_DEBUG === '1') {
+    err(`[debug] ${e instanceof Error ? (e.stack ?? e.message) : String(e)}`)
+  }
+}
+
+async function pickTokenName(title: string, activeHint?: string): Promise<string | undefined> {
+  requireTTY()
+  const store = loadStore()
+  if (store.tokens.length === 0) {
+    throw new UsageError('No tokens stored yet. Run `claudefob add <name>` first.')
+  }
+  const options = store.tokens.map((t) => ({
+    value: t.name,
+    label: t.name,
+    hint: [t.description, t.name === store.active ? '(active)' : undefined].filter(Boolean).join(' '),
+  }))
+  const initial = activeHint ?? store.active ?? undefined
+  const picked = await selectToken(title, options, initial)
+  if (isCancelled(picked)) return undefined
+  return picked as string
+}
+
+const addCommand = defineCommand({
+  meta: { name: 'add', description: 'Add a new token to the keystore' },
+  args: {
+    name: { type: 'positional', required: true },
+    description: { type: 'string' },
+  },
+  run: guard(async ({ args }) => {
+    validateName(args.name)
+    validateDescription(args.description)
+    const store = loadStore()
+    if (findToken(store, args.name)) {
+      throw new UsageError(`A token named '${args.name}' already exists.`)
+    }
+    requireTTY()
+    const tokenInput = await passwordPrompt(`Enter the token for '${args.name}'`)
+    if (isCancelled(tokenInput)) {
+      err('Cancelled.')
+      process.exit(2)
+    }
+    const token = (tokenInput as string).trim()
+    if (!token) {
+      throw new UsageError('Token must not be empty.')
+    }
+    const keystore = getKeystore()
+    keystore.set(args.name, token)
+    const rec: TokenRecord = {
+      name: args.name,
+      description: args.description,
+      createdAt: new Date().toISOString(),
+      last4: last4(token),
+    }
+    try {
+      saveStore(addToken(store, rec))
+    } catch (e) {
+      try {
+        keystore.delete(args.name)
+      } catch {
+        // best effort rollback
+      }
+      throw e
+    }
+    err(`Added '${args.name}'.`)
+  }),
+})
+
+const listCommand = defineCommand({
+  meta: { name: 'list', description: 'List stored tokens' },
+  args: { json: { type: 'boolean' } },
+  run: guard(async ({ args }) => {
+    const store = loadStore()
+    const keystore = getKeystore()
+    const rows = store.tokens.map((t) => {
+      let missing = false
+      try {
+        missing = keystore.get(t.name) === null
+      } catch {
+        missing = false
+      }
+      return { t, missing }
+    })
+    if (args.json) {
+      errJson({
+        active: store.active,
+        tokens: rows.map(({ t, missing }) => ({
+          name: t.name,
+          description: t.description ?? null,
+          createdAt: t.createdAt,
+          masked: mask(t),
+          active: t.name === store.active,
+          missing,
+        })),
+      })
+      return
+    }
+    if (store.tokens.length === 0) {
+      err('No tokens stored yet. Run `claudefob add <name>` first.')
+      return
+    }
+    const tableRows = rows.map(({ t, missing }) => ({
+      active: t.name === store.active ? '●' : '',
+      name: t.name,
+      description: t.description ?? '',
+      added: t.createdAt.slice(0, 10),
+      token: mask(t) + (missing ? ' ⚠ missing' : ''),
+    }))
+    err(
+      renderTable(tableRows, [
+        { header: '', key: 'active' },
+        { header: 'NAME', key: 'name' },
+        { header: 'DESCRIPTION', key: 'description' },
+        { header: 'ADDED', key: 'added' },
+        { header: 'TOKEN', key: 'token' },
+      ]),
+    )
+  }),
+})
+
+const showCommand = defineCommand({
+  meta: { name: 'show', description: 'Reveal a token (requires OS authentication)' },
+  args: { name: { type: 'positional', required: false } },
+  run: guard(async ({ args }) => {
+    const store = loadStore()
+    let name = args.name as string | undefined
+    if (!name) {
+      name = await pickTokenName('Select a token to reveal')
+      if (!name) return // cancelled: exit 0, no auth challenge
+    } else if (!findToken(store, name)) {
+      throw new UsageError(`No token named '${name}'.`)
+    }
+
+    let backend
+    try {
+      backend = selectBackend()
+    } catch (e) {
+      if (e instanceof AuthUnavailableError) {
+        throw new AuthError(e.message)
+      }
+      throw e
+    }
+    let ok = false
+    try {
+      ok = await backend.challenge()
+    } catch (e) {
+      debug(e)
+      ok = false
+    }
+    if (!ok) {
+      throw new AuthError(
+        'Authentication failed or was cancelled. To inspect the keystore directly, use Keychain Access (macOS), seahorse (Linux), or Credential Manager (Windows).',
+      )
+    }
+    const keystore = getKeystore()
+    let secret: string | null
+    try {
+      secret = keystore.get(name)
+    } catch (e) {
+      throw new KeystoreError((e as Error).message)
+    }
+    if (secret === null) {
+      throw new KeystoreError(`Secret for '${name}' is missing from the keystore.`)
+    }
+    err(secret)
+  }),
+})
+
+const statusCommand = defineCommand({
+  meta: { name: 'status', description: 'Show activation status' },
+  args: { json: { type: 'boolean' } },
+  run: guard(async ({ args }) => {
+    const store = loadStore()
+    const hookInstalled = process.env.CLAUDEFOB_HOOK === '1'
+    const active = store.active ? findToken(store, store.active) : undefined
+    const envValue = process.env[VAR]
+    let thisShell: 'inactive' | 'in sync' | 'stale'
+    if (!envValue && !active) thisShell = 'inactive'
+    else if (!envValue || !active) thisShell = active ? 'stale' : 'inactive'
+    else thisShell = last4(envValue) === active.last4 ? 'in sync' : 'stale'
+
+    let execPolicyBlocked: boolean | undefined
+    if (process.platform === 'win32') {
+      try {
+        const { execFileSync } = require('node:child_process')
+        const out = execFileSync('powershell', ['-NoProfile', '-Command', 'Get-ExecutionPolicy -Scope CurrentUser'], {
+          encoding: 'utf8',
+        }).trim()
+        execPolicyBlocked = out === 'Restricted'
+      } catch {
+        execPolicyBlocked = undefined
+      }
+    }
+
+    if (args.json) {
+      errJson({
+        active: store.active,
+        description: active?.description ?? null,
+        masked: active ? mask(active) : null,
+        addedAt: active?.createdAt ?? null,
+        variable: VAR,
+        hookInstalled,
+        thisShell,
+        executionPolicyBlocked: execPolicyBlocked ?? null,
+      })
+    } else {
+      if (!store.active || !active) {
+        err('No token is active.')
+      } else {
+        err(`Active: ${colors.bold(active.name)} ${active.description ? `(${active.description})` : ''}`)
+        err(`Token: ${mask(active)}  Added: ${active.createdAt.slice(0, 10)}`)
+      }
+      err(`Variable: ${VAR}`)
+      err(`Hook installed: ${hookInstalled ? 'yes' : 'no (run `claudefob guide`)'}`)
+      err(`This shell: ${thisShell}`)
+      if (execPolicyBlocked) {
+        err('Warning: PowerShell execution policy is Restricted; the profile will not load.')
+      }
+    }
+    process.exit(store.active ? 0 : 1)
+  }),
+})
+
+async function doActivate(args: { name?: string; shell?: string }) {
+  const shell = resolveShell(args)
+  const store = loadStore()
+  let name = args.name
+  if (!name) {
+    name = await pickTokenName('Select a token to activate', store.active ?? undefined)
+    if (!name) return // cancelled
+  }
+  const rec = findToken(store, name)
+  if (!rec) {
+    throw new UsageError(`No token named '${name}'.`)
+  }
+  const keystore = getKeystore()
+  let secret: string | null
+  try {
+    secret = keystore.get(name)
+  } catch (e) {
+    throw new KeystoreError((e as Error).message)
+  }
+  if (secret === null) {
+    throw new KeystoreError(`Secret for '${name}' is missing from the keystore. Try \`claudefob remove ${name}\` and re-add it.`)
+  }
+  saveStore(setActive(store, name))
+  try {
+    const result = ensureOnboarding()
+    if (result.kind === 'created' || result.kind === 'patched') {
+      note('Fixed ~/.claude.json so Claude Code will not prompt for auth again.')
+    } else if (result.kind === 'verify-failed' || result.kind === 'error') {
+      err(`Could not update ~/.claude.json automatically (${result.reason}). Manual fix: set "hasCompletedOnboarding": true in ~/.claude.json.`)
+    }
+  } catch (e) {
+    debug(e)
+  }
+  err(`Activated '${name}'.`)
+  emitShellCode(codegenFor(shell).setEnv(VAR, secret))
+}
+
+const useCommand = defineCommand({
+  meta: { name: 'use', description: 'Activate a token' },
+  args: {
+    name: { type: 'positional', required: false },
+    shell: { type: 'string' },
+  },
+  run: guard(async ({ args }) => {
+    await doActivate({ name: args.name as string | undefined, shell: args.shell })
+  }),
+})
+
+const stopCommand = defineCommand({
+  meta: { name: 'stop', description: 'Deactivate the current token' },
+  args: { shell: { type: 'string' } },
+  run: guard(async ({ args }) => {
+    const shell = resolveShell(args)
+    const store = loadStore()
+    saveStore(setActive(store, null))
+    err('Deactivated.')
+    emitShellCode(codegenFor(shell).unsetEnv(VAR))
+  }),
+})
+
+const removeCommand = defineCommand({
+  meta: { name: 'remove', description: 'Remove a stored token' },
+  args: {
+    name: { type: 'positional', required: false },
+    yes: { type: 'boolean' },
+    shell: { type: 'string' },
+  },
+  run: guard(async ({ args }) => {
+    const shell = resolveShell(args)
+    const store = loadStore()
+    let name = args.name as string | undefined
+    if (!name) {
+      name = await pickTokenName('Select a token to remove')
+      if (!name) return
+    }
+    const rec = findToken(store, name)
+    if (!rec) {
+      throw new UsageError(`No token named '${name}'.`)
+    }
+    if (!args.yes) {
+      requireTTY()
+      const confirmed = await confirmPrompt(`Remove token '${name}'? This cannot be undone.`)
+      if (isCancelled(confirmed) || !confirmed) {
+        err('Cancelled.')
+        return
+      }
+    }
+    const keystore = getKeystore()
+    try {
+      keystore.delete(name)
+    } catch (e) {
+      if (e instanceof KeystoreUnavailableError) {
+        throw new KeystoreError(e.message)
+      }
+      throw e
+    }
+    const wasActive = store.active === name
+    saveStore(removeToken(store, name))
+    err(`Removed '${name}'.`)
+    if (wasActive) {
+      emitShellCode(codegenFor(shell).unsetEnv(VAR))
+    }
+  }),
+})
+
+const initCommand = defineCommand({
+  meta: { name: 'init', description: 'Print the shell integration block' },
+  args: { shell: { type: 'string' } },
+  run: guard(async ({ args }) => {
+    const shell = resolveShell(args)
+    err('Append the following to your shell rc file, then restart your shell:')
+    err('  claudefob init >> ~/.zshrc   # or the rc file for your shell')
+    err('See `claudefob guide` for a full list of rc files and platform notes.')
+    emitShellCode(codegenFor(shell).hookBlock())
+  }),
+})
+
+const guideCommand = defineCommand({
+  meta: { name: 'guide', description: 'Print setup and troubleshooting guidance' },
+  args: { shell: { type: 'string' } },
+  run: guard(async ({ args }) => {
+    const shell = resolveShell(args)
+    const store = loadStore()
+    err(`Detected platform: ${process.platform}, shell: ${shell}`)
+    err('')
+    err('Install: append the hook block to your rc file, e.g.:')
+    err(`  claudefob init --shell ${shell} >> <rc file>`)
+    err('')
+    err('rc file candidates and when each applies:')
+    for (const c of rcCandidates()) {
+      err(`  ${c.path}  (${c.shell}) — ${c.note}`)
+    }
+    err('')
+    err('Scanning for installed hook blocks...')
+    let foundAny = false
+    for (const c of rcCandidates()) {
+      let text: string
+      try {
+        text = fs.readFileSync(c.path, 'utf8')
+      } catch {
+        continue
+      }
+      const lines = text.split('\n')
+      const start = lines.findIndex((l) => l.includes('>>> claudefob >>>'))
+      const end = lines.findIndex((l) => l.includes('<<< claudefob <<<'))
+      if (start !== -1) {
+        foundAny = true
+        err(`  ${c.path}: lines ${start + 1}-${end === -1 ? '?' : end + 1}`)
+      }
+    }
+    if (!foundAny) err('  (none found)')
+    err('')
+    if (store.active) {
+      err('A token is currently active. Run `claudefob stop` before removing the hook.')
+    }
+    err('To remove the hook block:')
+    if (process.platform === 'darwin') {
+      err("  sed -i '' '/# >>> claudefob >>>/,/# <<< claudefob <<</d' <file>")
+    } else if (process.platform === 'win32') {
+      err('  PowerShell: (Get-Content $PROFILE) | Where-Object { -not $inBlock } | Set-Content $PROFILE')
+    } else {
+      err("  sed -i '/# >>> claudefob >>>/,/# <<< claudefob <<</d' <file>")
+    }
+  }),
+})
+
+const exportCommand = defineCommand({
+  meta: { name: 'export', description: 'Internal: emit shell code for current state', hidden: true },
+  args: { shell: { type: 'string' } },
+  run: guard(async ({ args }) => {
+    let shell: ShellDialect
+    try {
+      shell = args.shell ? parseShellFlag(args.shell) : detectShell()
+    } catch (e) {
+      debug(e)
+      return
+    }
+    runExport(shell)
+  }),
+})
+
+const main = defineCommand({
+  meta: {
+    name: 'claudefob',
+    version: '0.1.0',
+    description: 'Unofficial CLI to store multiple Claude Code OAuth tokens and activate one at a time.',
+  },
+  args: {
+    shell: { type: 'string' },
+    json: { type: 'boolean' },
+  },
+  subCommands: {
+    add: addCommand,
+    list: listCommand,
+    show: showCommand,
+    status: statusCommand,
+    use: useCommand,
+    stop: stopCommand,
+    remove: removeCommand,
+    init: initCommand,
+    guide: guideCommand,
+    export: exportCommand,
+  },
+  run: guard(async ({ args, rawArgs }) => {
+    // citty invokes the parent's `run` unconditionally, even after dispatching to a matched
+    // subcommand — so this only performs the bare-invocation activation picker when no known
+    // subcommand token is present in the raw args; otherwise the subcommand already ran.
+    const subNames = ['add', 'list', 'show', 'status', 'use', 'stop', 'remove', 'init', 'guide', 'export']
+    if (rawArgs.some((a) => subNames.includes(a))) return
+    await doActivate({ shell: args.shell as string | undefined })
+  }),
+})
+
+async function start() {
+  const argv = process.argv.slice(2)
+  const isExport = argv[0] === 'export'
+  if (isExport) {
+    // export has its own outermost guard: swallow everything, always exit 0.
+    process.on('uncaughtException', () => process.exit(0))
+    process.on('unhandledRejection', () => process.exit(0))
+    try {
+      await runMain(main, { rawArgs: argv })
+    } catch {
+      // fall through
+    }
+    process.exit(0)
+  }
+
+  try {
+    await runMain(main, {
+      rawArgs: argv,
+      // citty prints help/usage via console.log by default (stdout); redirect via process shim below.
+    })
+  } catch (e) {
+    reportAndExit(e)
+  }
+}
+
+// citty's default renderer writes --help/--version to stdout via console.log. Route console.log to
+// stderr globally in this process so help text never contaminates the shell eval.
+const realConsoleLog = console.log.bind(console)
+console.log = (...a: unknown[]) => {
+  process.stderr.write(a.map(String).join(' ') + '\n')
+}
+void realConsoleLog
+
+start()
