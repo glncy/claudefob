@@ -1,0 +1,40 @@
+name: CI
+on: { push: { branches: [main] }, pull_request: {} }
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun run build:test # dist-test/cli.js — __CLAUDEFOB_TEST__=true; the only
+        #                         bundle in which CLAUDEFOB_FAKE_* hooks are live
+      - run: bun test # unit tests (pure) + subprocess tests driving dist-test/cli.js
+      - run: bun run build # dist/cli.js — the release bundle, hooks dead-code-eliminated
+      - name: startup budget (ADDENDUM A5)
+        run: node scripts/startup-budget.mjs
+      - name: integration (macos)
+        if: matrix.os == 'macos-latest'
+        timeout-minutes: 5
+        run: |
+          security unlock-keychain -p "" "$HOME/Library/Keychains/login.keychain-db" || \
+            security unlock-keychain "$HOME/Library/Keychains/login.keychain-db"
+          node scripts/integration.mjs
+      - name: integration (windows)
+        if: matrix.os == 'windows-latest'
+        timeout-minutes: 5
+        run: node scripts/integration.mjs
+      - name: auth compile smoke (windows)
+        if: matrix.os == 'windows-latest'
+        run: node scripts/win-authtype-smoke.mjs
+      - name: integration (linux)
+        if: matrix.os == 'ubuntu-latest'
+        timeout-minutes: 5
+        run: |
+          sudo apt-get update && sudo apt-get install -y gnome-keyring dbus-x11
+          dbus-run-session -- bash -c 'echo -n "" | gnome-keyring-daemon --unlock --daemonize --components=secrets; node scripts/integration.mjs'
