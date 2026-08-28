@@ -60,8 +60,17 @@ export const posixCodegen: ShellCodegen = {
       'elif [ -n "${BASH_VERSION:-}" ]; then',
       '  case ";${PROMPT_COMMAND:-};" in',
       '    *";_claudefob_sync;"*) ;;',
-      '    *) PROMPT_COMMAND="_claudefob_sync${PROMPT_COMMAND:+;$PROMPT_COMMAND}" ;;',
+      '    *) PROMPT_COMMAND="_claudefob_sync;_claudefob_armed=0${PROMPT_COMMAND:+;$PROMPT_COMMAND}" ;;',
       '  esac',
+      '  # bash has no preexec, so a DEBUG trap stands in for it — without one the first command',
+      '  # after a switch made elsewhere still runs with the old value. DEBUG fires once per simple',
+      '  # command, so _claudefob_armed limits it to the first of each prompt cycle. Installed only',
+      '  # when nothing else owns the DEBUG trap, so bash-preexec and prompt frameworks are',
+      '  # untouched; those users still get the PROMPT_COMMAND path.',
+      '  if [ -z "$(trap -p DEBUG 2>/dev/null)" ]; then',
+      '    _claudefob_armed=0',
+      "    trap '[ \"$_claudefob_armed\" = 0 ] && { _claudefob_armed=1; _claudefob_sync; }' DEBUG",
+      '  fi',
       'fi',
     ]
     return [

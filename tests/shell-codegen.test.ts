@@ -191,3 +191,20 @@ describe('sync fires before a command as well as before the prompt', () => {
     expect(b).toContain('--on-event fish_prompt --on-event fish_preexec')
   })
 })
+
+describe('bash gets a preexec equivalent without breaking other tools', () => {
+  test('installs a DEBUG trap only when nothing else owns it', () => {
+    // bash-preexec, starship and several prompt frameworks own the DEBUG trap. Clobbering it
+    // would break them, so the trap is conditional and those users keep the PROMPT_COMMAND path.
+    const b = codegenFor('posix').hookBlock()
+    expect(b).toContain('if [ -z "$(trap -p DEBUG 2>/dev/null)" ]; then')
+    expect(b).toContain('DEBUG')
+  })
+
+  test('the DEBUG trap runs at most once per prompt cycle', () => {
+    // DEBUG fires per simple command; without the guard a pipeline would sync several times.
+    const b = codegenFor('posix').hookBlock()
+    expect(b).toContain('_claudefob_armed=1')
+    expect(b).toContain('_claudefob_sync;_claudefob_armed=0')
+  })
+})

@@ -34,3 +34,15 @@ describe('stdout discipline (SPEC §3)', () => {
     expect(offenders).toEqual([])
   })
 })
+
+describe('the update command keeps package-manager output off stdout', () => {
+  test('child stdout is redirected to fd 2, never plain inherit', () => {
+    // Regression: `stdio: 'inherit'` sent npm's own output to stdout, where the shell function
+    // wrapper eval'd it — "changed 11 packages" ran as the command `changed`.
+    const src = fs.readFileSync(path.join(import.meta.dir, '..', 'src', 'cli.ts'), 'utf8')
+    const block = src.match(/const updateCommand[\s\S]*?\n\}\)\n/)
+    expect(block).not.toBeNull()
+    expect(block![0]).toContain("stdio: ['inherit', 2, 'inherit']")
+    expect(block![0]).not.toContain("stdio: 'inherit'")
+  })
+})

@@ -454,7 +454,11 @@ const updateCommand = defineCommand({
     const { spawnSync } = await import('node:child_process')
     const parts = cmd.split(' ')
     const bin = parts[0] as string
-    const res = spawnSync(bin, parts.slice(1), { stdio: 'inherit' })
+    // The package manager's own output is human-facing, so it must land on stderr like everything
+    // else we print. With plain 'inherit' it went to stdout, where the shell function wrapper
+    // captured it and fed it to eval — npm's "changed 11 packages" became "command not found:
+    // changed". Child stdout is mapped to fd 2 so our stdout stays reserved for shell code.
+    const res = spawnSync(bin, parts.slice(1), { stdio: ['inherit', 2, 'inherit'] })
     if (res.status !== 0) {
       err(`Update command failed. Run it manually:\n  ${cmd}`)
       process.exit(1)
@@ -479,7 +483,7 @@ const exportCommand = defineCommand({
   }),
 })
 
-export const VERSION = '0.1.2'
+export const VERSION = '0.1.3'
 
 /** Same command under another name, hidden from --help so only the canonical name is advertised. */
 function hiddenAlias<T extends { meta?: unknown }>(cmd: T, name: string): T {
