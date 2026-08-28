@@ -78,7 +78,10 @@ Emitted code per dialect:
 | fish | `set -gx CLAUDE_CODE_OAUTH_TOKEN '…'` | `set -e CLAUDE_CODE_OAUTH_TOKEN` |
 | powershell | `$env:CLAUDE_CODE_OAUTH_TOKEN='…'` | `Remove-Item Env:\CLAUDE_CODE_OAUTH_TOKEN -ErrorAction SilentlyContinue` |
 
-Single quotes escaped unconditionally (`'\''` posix/fish, `''` PowerShell).
+Single quotes escaped unconditionally, using the dialect-correct form: posix `'` → `'\''`;
+fish `\` → `\\` then `'` → `\'` (fish honours backslash escapes inside single quotes, so the
+posix `'\''` idiom would emit a literal backslash there); PowerShell `'` → `''`.
+*(Errata: earlier drafts said `'\''` for fish; that was wrong.)*
 
 Known limitation, reported by `status` rather than hidden: already-open shells keep their value
 until restarted.
@@ -184,8 +187,11 @@ when required) · `3` auth failed or cancelled · `4` keystore unavailable.
 
 ## 7. Errors
 
-Linux with no Secret Service: `add` fails loudly with the `dbus-run-session --
-gnome-keyring-daemon --unlock` fix. **No plaintext fallback, by design.**
+Linux with no Secret Service: `add` fails loudly with the fix — log in to a desktop session, or
+install and start gnome-keyring:
+`dbus-run-session -- bash -c 'echo -n "" | gnome-keyring-daemon --unlock --daemonize --components=secrets; exec $SHELL'`.
+*(Errata: an earlier draft printed `dbus-run-session -- gnome-keyring-daemon --unlock`, which blocks
+the foreground shell and does not reliably expose the secrets component.)* **No plaintext fallback, by design.**
 Corrupt `store.json`: reported with path, never silently recreated.
 Drift (record present, secret gone): `list` marks `⚠ missing`, `use` exits 4, `remove` still works.
 
@@ -237,9 +243,11 @@ quote escaping, shell/OS detection, store mutations, rc-file scanning, `last4`/m
 
 CI matrix `macos-latest` / `ubuntu-latest` / `windows-latest`: typecheck, unit tests, build, then
 an integration test that stores a real token, reads it back, and asserts the emitted code sets the
-variable in a real zsh/bash/pwsh session. Linux needs
-`dbus-run-session -- gnome-keyring-daemon --unlock` — the same command the error message tells
-users to run, so CI validates the advice.
+variable in a real zsh/bash/pwsh session. Linux brings up the keystore with
+`dbus-run-session -- bash -c 'echo -n "" | gnome-keyring-daemon --unlock --daemonize --components=secrets; <test>'`
+— the same incantation the §7 error message tells users to run, so CI validates the advice. macOS
+runners `security unlock-keychain` first, and every integration step is time-limited so a keychain
+prompt fails fast rather than hanging.
 
 Auth backends are interactive by design and cannot run in CI: injectable interface plus a
 `CLAUDEFOB_FAKE_AUTH=1` test hook that is never present in release builds.
