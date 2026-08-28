@@ -15,46 +15,53 @@ npm i -g claudefob
 ```
 
 Then wire up shell integration — append the hook block to your rc file. It takes effect in any
-terminal you open afterwards. Pick the row for your shell; `--shell` is optional (claudefob
-detects it) and is shown here only so each line is copy-pasteable as-is.
+terminal you open afterwards.
 
-| Platform | Shell | Command |
-|---|---|---|
-| macOS | zsh (default since Catalina) | `claudefob init --shell posix >> ~/.zshrc` |
-| macOS | bash | `claudefob init --shell posix >> ~/.bash_profile` |
-| Linux | bash (default on most distros) | `claudefob init --shell posix >> ~/.bashrc` |
-| Linux | zsh | `claudefob init --shell posix >> ~/.zshrc` |
-| macOS / Linux | fish | `claudefob init --shell fish >> ~/.config/fish/config.fish` |
-| Windows | PowerShell 5.1 / 7 | see below |
-| Windows | Git Bash / WSL | use the Linux bash row |
+claudefob detects your shell from the parent process, so `--shell` is never needed. You only
+choose *which file* to append to:
 
 ```sh
-# macOS — zsh
-claudefob init --shell posix >> ~/.zshrc
+# macOS, zsh (the default shell since Catalina)
+claudefob init >> ~/.zshrc
 
-# macOS — bash (terminals are login shells here, so .bash_profile is the one that loads)
-claudefob init --shell posix >> ~/.bash_profile
+# Linux, bash (the default on most distros)
+claudefob init >> ~/.bashrc
 
-# Linux — bash (terminals are non-login shells here, so .bashrc is the one that loads)
-claudefob init --shell posix >> ~/.bashrc
+# macOS, bash — terminals are login shells here, so .bashrc is not read
+claudefob init >> ~/.bash_profile
 
-# macOS or Linux — fish
-claudefob init --shell fish >> ~/.config/fish/config.fish
+# fish, either platform
+claudefob init >> ~/.config/fish/config.fish
 ```
 
 ```powershell
-# Windows — PowerShell 5.1 or 7. The profile usually does not exist yet, so create it first.
+# Windows, PowerShell 5.1 or 7. The profile usually does not exist yet, so create it first.
 if (!(Test-Path $PROFILE)) { New-Item -Type File -Path $PROFILE -Force }
-claudefob init --shell powershell | Add-Content $PROFILE
+claudefob init | Add-Content $PROFILE
 ```
 
-Windows notes: PowerShell 5.1 and PowerShell 7 use **separate** profile files, so install into each
-if you use both — `$PROFILE` always resolves to the right one for the session you are in. If
-`Get-ExecutionPolicy` reports `Restricted`, profiles never load and this setup silently does
-nothing; fix it with `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
+Pass `--shell posix|fish|powershell` only to override detection — for example to read another
+platform's instructions from your own machine.
+
+### Which rc file?
+
+| Shell | File | Loaded for | Use it? |
+|---|---|---|---|
+| zsh | `~/.zshrc` | interactive shells | **Recommended.** Fires for every terminal you type in. |
+| zsh | `~/.zprofile` | login shells | Works on macOS, where every Terminal tab is a login shell. Missed by a plain `zsh` subshell. |
+| zsh | `~/.zshenv` | **every** zsh, scripts included | Only if you need the token outside interactive terminals. Adds a keystore read to every script you run. |
+| zsh | `~/.zlogin` | login shells, after `.zshrc` | No reason to use it here. |
+| bash | `~/.bashrc` | interactive non-login shells | **Recommended on Linux**, where terminals are non-login. |
+| bash | `~/.bash_profile` | login shells | **Recommended on macOS**, where every terminal is a login shell. Most setups source `.bashrc` from here. |
+| bash | `~/.profile` | login shells, read by several shells | Fallback when `.bash_profile` does not exist. |
+| fish | `~/.config/fish/config.fish` | every fish session | The only file fish needs. |
+| PowerShell | `$PROFILE` | every session of that PowerShell version | 5.1 and 7 have **separate** files — install into each if you use both. |
+
+Windows notes: if `Get-ExecutionPolicy` reports `Restricted`, profiles never load and this setup
+silently does nothing; fix it with `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
 
 **cmd.exe is not supported** — it has no profile mechanism and no command substitution. Use
-PowerShell.
+PowerShell. Git Bash and WSL are bash, so use the bash rows above.
 
 Run `claudefob guide` any time for platform-specific install steps, a scan of which rc files
 already have the block installed, and removal instructions.

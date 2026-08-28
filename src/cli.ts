@@ -12,7 +12,7 @@ import { selectToken, passwordPrompt, confirmPrompt, isCancelled, requireTTY, no
 import { renderTable } from './ui/table.ts'
 import { colors } from './ui/colors.ts'
 import { unknownTokenMessage } from './suggest.ts'
-import { warnIfHookMissing } from './hook-hint.ts'
+import { warnIfHookMissing, installCommandFor, suggestedRcFile } from './hook-hint.ts'
 import { maybeNotifyUpdate, detectInstallMethod, updateCommandFor, probe } from './update-check.ts'
 import { scanFenceBlocks } from './rc-scan.ts'
 import fs from 'node:fs'
@@ -372,8 +372,9 @@ const initCommand = defineCommand({
   run: guard(async ({ args }) => {
     const shell = resolveShell(args)
     err('Append the following to your shell rc file. It takes effect in any terminal you open afterwards:')
-    err('  claudefob init >> ~/.zshrc   # or the rc file for your shell')
-    err('See `claudefob guide` for a full list of rc files and platform notes.')
+    err(`  ${installCommandFor(shell)}`)
+    err(`Detected shell: ${shell} (${suggestedRcFile(shell)}). Override with --shell.`)
+    err('See `claudefob guide` for other rc files and platform notes.')
     emitShellCode(codegenFor(shell).hookBlock())
   }),
 })
