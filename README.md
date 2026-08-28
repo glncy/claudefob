@@ -154,8 +154,8 @@ patches that shell's environment immediately.
 
 ## Linux: make sure your keyring is persistent
 
-On a headless Linux box — a devbox reached over SSH, a container — there is often no unlocked
-login keyring. libsecret then stores secrets in the Secret Service **session** collection, which
+Run `claudefob guide` on the machine for the full recipe. In short: on a headless Linux box — a
+devbox reached over SSH, a container — there is often no unlocked login keyring. libsecret then stores secrets in the Secret Service **session** collection, which
 lives in memory. Everything works until the machine reboots, and then every secret is gone, while
 claudefob's metadata survives: `claudefob status` still names an active token and activating it
 fails with "no longer in the keystore".

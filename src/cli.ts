@@ -2,6 +2,7 @@ import { defineCommand, runMain } from 'citty'
 import { loadStore, saveStore, findToken, addToken, removeToken, setActive, validateName, validateDescription, last4, mask, type TokenRecord } from './store.ts'
 import { getKeystore, KeystoreUnavailableError } from './keystore.ts'
 import { keyringPersistence, ephemeralKeyringWarning } from './keyring-persistence.ts'
+import { linuxKeyringGuide } from './linux-keyring-guide.ts'
 import { codegenFor, detectShell, parseShellFlag, type ShellDialect } from './shell/index.ts'
 import { ensureOnboarding } from './claude-config.ts'
 import { rcCandidates, hookScriptPath, configDir } from './paths.ts'
@@ -470,8 +471,15 @@ const guideCommand = defineCommand({
     const store = loadStore()
     err(`Detected platform: ${process.platform}, shell: ${shell}`)
     err('')
-    err('Install: append the hook block to your rc file, e.g.:')
-    err(`  claudefob init --shell ${shell} >> <rc file>`)
+    err('Install: append the hook block to a shell startup file, e.g.:')
+    err(`  claudefob init >> ~/.zshrc          # zsh (macOS default)`)
+    err(`  claudefob init >> ~/.bashrc         # bash on Linux`)
+    err(`  claudefob init >> ~/.bash_profile   # bash on macOS (terminals are login shells)`)
+    err(`  claudefob init >> ~/.zprofile       # zsh login shells only`)
+    err(`  claudefob init >> ~/.config/fish/config.fish   # fish`)
+    err('')
+    err('Then activate it in the current terminal without opening a new one:')
+    err(`  source ${hookScriptPath(shell)}`)
     err('')
     err('rc file candidates and when each applies:')
     for (const c of rcCandidates()) {
@@ -498,6 +506,11 @@ const guideCommand = defineCommand({
       err('A token is currently active. Run `claudefob stop` before removing the hook.')
     }
     err('To remove the hook block:')
+    if (process.platform === 'linux') {
+      err('')
+      err(linuxKeyringGuide())
+      err('')
+    }
     if (process.platform === 'darwin') {
       err("  sed -i '' '/# >>> claudefob >>>/,/# <<< claudefob <<</d' <file>")
     } else if (process.platform === 'win32') {
@@ -636,7 +649,7 @@ const exportCommand = defineCommand({
   }),
 })
 
-export const VERSION = '0.3.4'
+export const VERSION = '0.3.5'
 
 /** Same command under another name, hidden from --help so only the canonical name is advertised. */
 function hiddenAlias<T extends { meta?: unknown }>(cmd: T, name: string): T {
