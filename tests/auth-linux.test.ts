@@ -30,16 +30,20 @@ describe('chooseLinuxMethod', () => {
 describe('linuxBackend', () => {
   test('sudo runs with -k so a cached timestamp never skips the prompt', async () => {
     const calls: [string, string[]][] = []
-    const b = linuxBackend('sudo', (bin, args) => {
-      calls.push([bin, args])
-      return { status: 0 }
-    })
+    const b = linuxBackend(
+      'sudo',
+      (bin, args) => {
+        calls.push([bin, args])
+        return { status: 0 }
+      },
+      () => true,
+    )
     expect(await b.challenge()).toBe(true)
     expect(calls).toEqual([['sudo', ['-k', '-v']]])
   })
 
   test('a non-zero exit is a refusal, not an error', async () => {
-    const b = linuxBackend('sudo', () => ({ status: 1 }))
+    const b = linuxBackend('sudo', () => ({ status: 1 }), () => true)
     expect(await b.challenge()).toBe(false)
   })
 
@@ -51,7 +55,7 @@ describe('linuxBackend', () => {
 
   test('a missing binary is reported as unavailable, not as a refusal', async () => {
     const err = Object.assign(new Error('spawn ENOENT'), { code: 'ENOENT' })
-    const b = linuxBackend('sudo', () => ({ status: null, error: err }))
+    const b = linuxBackend('sudo', () => ({ status: null, error: err }), () => true)
     await expect(b.challenge()).rejects.toThrow(AuthUnavailableError)
   })
 
