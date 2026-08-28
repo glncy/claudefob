@@ -52,12 +52,21 @@ describe('replaceBlocks', () => {
 })
 
 describe('writeFileAtomic', () => {
-  test('writes the content and preserves the file mode', () => {
+  test('writes the content', () => {
     const home = makeTmpHome()
     const f = path.join(home.home, 'rc')
     fs.writeFileSync(f, 'before\n', { mode: 0o600 })
     writeFileAtomic(f, 'after\n')
     expect(fs.readFileSync(f, 'utf8')).toBe('after\n')
+    home.cleanup()
+  })
+
+  test.skipIf(process.platform === 'win32')('preserves the file mode where the OS has one', () => {
+    // Windows has no POSIX permission bits; node reports 0o666 there regardless of what was set.
+    const home = makeTmpHome()
+    const f = path.join(home.home, 'rc')
+    fs.writeFileSync(f, 'before\n', { mode: 0o600 })
+    writeFileAtomic(f, 'after\n')
     expect(fs.statSync(f).mode & 0o777).toBe(0o600)
     home.cleanup()
   })
