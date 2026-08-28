@@ -67,15 +67,31 @@ describe('rc file fenced-block scan', () => {
   })
 })
 
-describe('init warns about an existing block rather than silently duplicating', () => {
-  test('the warning names every block and offers the removal command', () => {
-    // init cannot see the shell redirect, so it cannot know where its stdout is going; reading the
-    // known startup files is the only way it can notice an existing install.
+describe('init refuses to duplicate an existing block', () => {
+  test('it names every install, offers removal, and exits rather than appending', () => {
+    // init cannot see the shell redirect, so reading the known startup files is the only way it
+    // can notice an existing install. A warning alone was not enough — `>>` appends stdout
+    // regardless of exit code, so it must also emit nothing.
     const src = fs.readFileSync(path.join(import.meta.dir, '..', 'src', 'cli.ts'), 'utf8')
     const block = src.match(/const initCommand[\s\S]*?\n\}\)\n/)
     expect(block).not.toBeNull()
-    expect(block![0]).toContain('already has a claudefob block')
-    expect(block![0]).toContain('Appending again would duplicate it')
+    expect(block![0]).toContain('already installed in')
+    expect(block![0]).toContain('Appending again would duplicate the block')
     expect(block![0]).toContain('scanFenceBlocks')
+    expect(block![0]).toContain('process.exit(2)')
+    expect(block![0]).toContain('args.force')
+  })
+})
+
+describe('programmatic callers of init are not blocked by the duplicate refusal', () => {
+  test('update refreshes hook scripts with --force', () => {
+    // Regression: the refusal fires when a block is installed, which is exactly the situation
+    // `claudefob update` runs in — without --force it would refuse to refresh anything.
+    const src = fs.readFileSync(path.join(import.meta.dir, '..', 'src', 'cli.ts'), 'utf8')
+    const fn = src.match(/async function refreshInstalledHooks[\s\S]*?\n\}\n/)
+    expect(fn).not.toBeNull()
+    for (const call of fn![0].match(/spawnSync\('claudefob', \[[^\]]*\]/g) ?? []) {
+      expect(call).toContain("'--force'")
+    }
   })
 })

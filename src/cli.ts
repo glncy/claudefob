@@ -545,7 +545,8 @@ async function refreshInstalledHooks(assumeYes: boolean): Promise<void> {
   for (const d of ['posix', 'fish', 'powershell'] as const) {
     const scriptPath = hookScriptPath(d)
     if (!fs.existsSync(scriptPath)) continue
-    const r = spawnSync('claudefob', ['init', '--shell', d], { encoding: 'utf8' })
+    // --force because init refuses when a block is installed — which is precisely the case here.
+    const r = spawnSync('claudefob', ['init', '--shell', d, '--force'], { encoding: 'utf8' })
     if (r.status === 0) err(`Refreshed ${scriptPath}`)
     else err(`Could not refresh ${scriptPath}; run \`claudefob init --shell ${d}\` by hand.`)
   }
@@ -563,7 +564,7 @@ async function refreshInstalledHooks(assumeYes: boolean): Promise<void> {
   if (targets.length === 0) return
 
   const shell = detectShell()
-  const gen = spawnSync('claudefob', ['init', '--shell', shell], { encoding: 'utf8' })
+  const gen = spawnSync('claudefob', ['init', '--shell', shell, '--force'], { encoding: 'utf8' })
   if (gen.status !== 0 || !gen.stdout.trim()) {
     err('Could not read the new hook block from the updated binary; leaving your shell files alone.')
     err('Update the block by hand with: claudefob guide')

@@ -19,7 +19,9 @@ let ran = 0
 const skipped = []
 
 function block(dialect) {
-  const res = spawnSync(process.execPath, [CLI, 'init', '--shell', dialect], { encoding: 'utf8' })
+  // --force: init refuses when a block is already installed on this machine, which would make
+  // this check silently examine nothing.
+  const res = spawnSync(process.execPath, [CLI, 'init', '--shell', dialect, '--force'], { encoding: 'utf8' })
   if (res.status !== 0) {
     console.error(`FAIL: claudefob init --shell ${dialect} exited ${res.status}`)
     failures++
