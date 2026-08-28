@@ -2,6 +2,9 @@
 // Windows-only smoke test: compiles the Add-Type P/Invoke source used by src/auth/win32.ts
 // without ever calling CredUIPromptForWindowsCredentials (no dialog, so it runs headless in CI).
 import { spawnSync } from 'node:child_process'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 
 if (process.platform !== 'win32') {
   console.log('SKIP: not running on win32')
@@ -23,9 +26,14 @@ if (addTypeEnd === -1) {
 }
 const addTypeOnly = AUTH_TYPE_SOURCE.slice(0, addTypeEnd) + '\nWrite-Output "OK"'
 
-const res = spawnSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', '-'], {
-  input: addTypeOnly,
+// Run from a temp .ps1 rather than piping into `-Command -`: on the CI runner the piped form
+// exits 0 while producing no output at all, which is indistinguishable from a silent failure.
+const scriptPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'claudefob-smoke-')), 'smoke.ps1')
+fs.writeFileSync(scriptPath, addTypeOnly, 'utf8')
+
+const res = spawnSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath], {
   encoding: 'utf8',
+  timeout: 60_000,
 })
 
 if (res.status !== 0 || res.stdout.trim() !== 'OK') {
