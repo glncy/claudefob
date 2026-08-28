@@ -14,7 +14,7 @@ const REQUIRED: Record<string, Partial<Record<ShellDialect, RegExp>>> = {
   },
   'applies the active token at startup': {
     posix: /eval "\$\(command claudefob export --shell posix\)"/,
-    fish: /eval \(command claudefob export --shell fish\)/,
+    fish: /eval \(command claudefob export --shell fish \| string collect\)/,
     powershell: /claudefob export --shell powershell \| Out-String/,
   },
   'defines the wrapper that patches the current shell': {
@@ -69,13 +69,15 @@ describe('hook block parity across every supported shell', () => {
 })
 
 describe('fish handles multi-line shell code correctly', () => {
-  test('every fish eval of claudefob output pipes through `string collect`', () => {
+  test('every fish command substitution of claudefob output pipes through `string collect`', () => {
     // fish splits command substitution on newlines into separate arguments. Without `string
     // collect` a two-line export was flattened into one command and the token absorbed the
     // following line — CLAUDE_CODE_OAUTH_TOKEN came out as
     // "sk-ant-... set -gx CLAUDEFOB_APPLIED work".
     const b = codegenFor('fish').hookBlock()
-    const evals = b.split('\n').filter((l) => l.includes('claudefob export --shell fish'))
+    // Covers the wrapper function too: `claudefob use` emits two lines and was corrupted the
+    // same way as startup.
+    const evals = b.split('\n').filter((l) => l.includes('(command claudefob'))
     expect(evals.length).toBeGreaterThan(0)
     for (const line of evals) {
       expect(line).toContain('string collect')

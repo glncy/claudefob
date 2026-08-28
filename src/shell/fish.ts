@@ -32,7 +32,7 @@ export const fishCodegen: ShellCodegen = {
       '# Seed the sync marker at startup; see the posix block for why lazy creation misses a switch.',
       'touch /tmp/claudefob-sync-$fish_pid 2>/dev/null',
       'function claudefob',
-      '    set -l __cf_out (command claudefob $argv --shell fish)',
+      '    set -l __cf_out (command claudefob $argv --shell fish | string collect)',
       '    or return $status',
       '    test -n "$__cf_out"; and eval $__cf_out',
       'end',
