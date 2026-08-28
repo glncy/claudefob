@@ -176,3 +176,18 @@ describe('hook blocks degrade quietly when the binary is absent', () => {
     }
   })
 })
+
+describe('sync fires before a command as well as before the prompt', () => {
+  test('zsh registers both precmd and preexec', () => {
+    // Regression: with precmd alone, the first command typed after a switch made in another
+    // terminal still ran with the old value — only the command after it was correct.
+    const b = codegenFor('posix').hookBlock()
+    expect(b).toContain('add-zsh-hook precmd _claudefob_sync')
+    expect(b).toContain('add-zsh-hook preexec _claudefob_sync')
+  })
+
+  test('fish binds both fish_prompt and fish_preexec', () => {
+    const b = codegenFor('fish').hookBlock()
+    expect(b).toContain('--on-event fish_prompt --on-event fish_preexec')
+  })
+})
