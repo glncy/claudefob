@@ -14,24 +14,52 @@ Keychain, Linux Secret Service, Windows Credential Manager) and activates exactl
 npm i -g claudefob
 ```
 
-Then wire up shell integration — append the hook block to your rc file and restart your shell:
+Then wire up shell integration — append the hook block to your rc file and restart your shell.
+Pick the row for your shell; `--shell` is optional (claudefob detects it) and shown here only so
+each line is copy-pasteable as-is.
+
+| Platform | Shell | Command |
+|---|---|---|
+| macOS | zsh (default since Catalina) | `claudefob init --shell posix >> ~/.zshrc` |
+| macOS | bash | `claudefob init --shell posix >> ~/.bash_profile` |
+| Linux | bash (default on most distros) | `claudefob init --shell posix >> ~/.bashrc` |
+| Linux | zsh | `claudefob init --shell posix >> ~/.zshrc` |
+| macOS / Linux | fish | `claudefob init --shell fish >> ~/.config/fish/config.fish` |
+| Windows | PowerShell 5.1 / 7 | see below |
+| Windows | Git Bash / WSL | use the Linux bash row |
 
 ```sh
-# zsh
+# macOS — zsh
 claudefob init --shell posix >> ~/.zshrc
+exec zsh
 
-# bash
+# macOS — bash (terminals are login shells here, so .bash_profile is the one that loads)
+claudefob init --shell posix >> ~/.bash_profile
+exec bash
+
+# Linux — bash (terminals are non-login shells here, so .bashrc is the one that loads)
 claudefob init --shell posix >> ~/.bashrc
+exec bash
 
-# fish
+# macOS or Linux — fish
 claudefob init --shell fish >> ~/.config/fish/config.fish
+exec fish
 ```
 
 ```powershell
-# PowerShell (create the profile first if it doesn't exist)
-New-Item -Type File -Path $PROFILE -Force
+# Windows — PowerShell 5.1 or 7. The profile usually does not exist yet, so create it first.
+if (!(Test-Path $PROFILE)) { New-Item -Type File -Path $PROFILE -Force }
 claudefob init --shell powershell | Add-Content $PROFILE
+. $PROFILE
 ```
+
+Windows notes: PowerShell 5.1 and PowerShell 7 use **separate** profile files, so install into each
+if you use both — `$PROFILE` always resolves to the right one for the session you are in. If
+`Get-ExecutionPolicy` reports `Restricted`, profiles never load and this setup silently does
+nothing; fix it with `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
+
+**cmd.exe is not supported** — it has no profile mechanism and no command substitution. Use
+PowerShell.
 
 Run `claudefob guide` any time for platform-specific install steps, a scan of which rc files
 already have the block installed, and removal instructions.
@@ -152,7 +180,7 @@ work with a `CLAUDEFOB_APPLIED` marker and clears the variable only when that ma
 copied when the process started, so it keeps the token it launched with until you exit and start
 `claude` again. No tool can change a running process's environment.
 
-If you installed the hook before v0.2.0, re-run `claudefob init` to pick up the sync block.
+If you installed the hook before this release, re-run `claudefob init` to pick up the sync block.
 
 ## License
 

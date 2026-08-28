@@ -158,7 +158,7 @@ Node runtime's own start, against a 100 ms budget asserted in CI on all three pl
 `keystoreHint(platform)` in `src/keystore.ts` now supplies platform-specific remediation — the
 Linux branch prints the exact commands CI runs, so printed advice cannot drift from what works.
 
-## A8. Cross-terminal sync (v0.2.0)
+## A8. Cross-terminal sync
 
 An already-open terminal could not see a switch made elsewhere, because environment variables are
 per-process. Resolved without any user-facing flag: the sync is part of the standard hook block.

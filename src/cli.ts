@@ -475,7 +475,7 @@ const exportCommand = defineCommand({
   }),
 })
 
-export const VERSION = '0.2.0'
+export const VERSION = '0.1.0'
 
 /** Same command under another name, hidden from --help so only the canonical name is advertised. */
 function hiddenAlias<T extends { meta?: unknown }>(cmd: T, name: string): T {
