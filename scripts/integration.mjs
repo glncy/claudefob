@@ -152,8 +152,10 @@ if (process.platform === 'win32') {
 const showRes = run(['show', tokenName], { env: { ...env, CLAUDEFOB_FAKE_AUTH: '1' } })
 if (showRes.stdout !== '') fail(`show wrote to stdout: ${JSON.stringify(showRes.stdout)}`)
 if (![0, 3].includes(showRes.status)) fail(`show should exit 0 or 3, got ${showRes.status}`)
-if (showRes.stdout.includes(tokenValue) || showRes.stderr.includes(tokenValue)) {
-  fail('show leaked the token despite a failed/bypassed auth gate')
+// Only a REFUSED gate implies the token must be absent from stderr. When the runner's backend
+// accepts (passwordless sudo), printing the token to stderr is show's correct behaviour.
+if (showRes.status === 3 && (showRes.stdout.includes(tokenValue) || showRes.stderr.includes(tokenValue))) {
+  fail('show leaked the token despite a refused auth gate')
 }
 
 // 5. Clean up.

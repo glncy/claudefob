@@ -124,11 +124,10 @@ describe('stdout/stderr discipline over a real subprocess', () => {
     expect(showDeniedR.stdout).toBe('')
     expect(showDeniedR.stderr).not.toContain('sk-ant-aaaa')
 
-    // With no fake seam the real OS backend runs. Its outcome is environment-dependent (GitHub's
-    // macOS runners have passwordless sudo, so it can legitimately succeed), but in every
-    // environment the secret must never reach stdout.
-    const showRealR = runIn(['show', 'work'], undefined)
-    expect(showRealR.stdout).toBe('')
+    // Deliberately NOT exercising the real auth backend here: on Windows it opens a modal
+    // credential dialog that never returns in a headless runner, and on GitHub's macOS runners
+    // passwordless sudo makes its outcome environment-dependent. The release bundle's freedom
+    // from the fake seam is proven separately by the string-absence test below.
 
     const showFakeAuthR = spawnSync(
       'node',
