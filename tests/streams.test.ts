@@ -168,6 +168,70 @@ describe('stdout/stderr discipline over a real subprocess', () => {
     home.cleanup()
   })
 
+  test('use against a throwing (not merely empty) keystore: exit 4, no "remove and re-add" drift advice', () => {
+    // Regression: realKeystore.get() used to convert *every* getPassword() failure (locked
+    // keystore, dead D-Bus, access denied) into null='missing', so `use` printed "Try
+    // `claudefob remove x` and re-add it" even when the secret was never actually missing —
+    // just transiently unreachable. CLAUDEFOB_FAKE_KEYSTORE=__THROW__ simulates that transient
+    // failure; the fix must surface it as a keystore-unavailable error, not a "missing" one.
+    const home = makeTmpHome()
+    const env: Record<string, string | undefined> = { ...baseTestEnv(home), CLAUDEFOB_FAKE_KEYSTORE: '__THROW__' }
+    const store = {
+      version: 1,
+      active: null,
+      tokens: [{ name: 'work', createdAt: new Date().toISOString(), last4: 'aaaa' }],
+    }
+    const storeDir = path.join(home.configHome, 'claudefob')
+    fs.mkdirSync(storeDir, { recursive: true })
+    fs.writeFileSync(path.join(storeDir, 'store.json'), JSON.stringify(store), { mode: 0o600 })
+
+    const r = spawnSync('node', [distTestCli, 'use', 'work', '--shell', 'posix'], { env, encoding: 'utf8' })
+    expect(r.status).toBe(4)
+    expect(r.stdout).toBe('')
+    expect(r.stderr).not.toContain('remove')
+
+    home.cleanup()
+  })
+
+  test('list is metadata-only: never touches the keystore, even a throwing one, and prints no drift marker', () => {
+    // Regression: list used to call keystore.get() per token to compute a "⚠ missing" marker,
+    // contradicting SPEC §2/§4.2 ("metadata only — no keystore read"). With a keystore
+    // configured to throw on every call, list must still succeed.
+    const home = makeTmpHome()
+    const env: Record<string, string | undefined> = { ...baseTestEnv(home), CLAUDEFOB_FAKE_KEYSTORE: '__THROW__' }
+    const store = {
+      version: 1,
+      active: null,
+      tokens: [{ name: 'work', createdAt: new Date().toISOString(), last4: 'aaaa' }],
+    }
+    const storeDir = path.join(home.configHome, 'claudefob')
+    fs.mkdirSync(storeDir, { recursive: true })
+    fs.writeFileSync(path.join(storeDir, 'store.json'), JSON.stringify(store), { mode: 0o600 })
+
+    const r = spawnSync('node', [distTestCli, 'list', '--json'], { env, encoding: 'utf8' })
+    expect(r.status).toBe(0)
+    expect(r.stdout).toBe('')
+    const parsed = JSON.parse(r.stderr)
+    expect(parsed.tokens).toHaveLength(1)
+    expect(parsed.tokens[0]).not.toHaveProperty('missing')
+
+    home.cleanup()
+  })
+
+  test('status: env var set but nothing active reports "stale", not "inactive" (SPEC §4.4)', () => {
+    const home = makeTmpHome()
+    const env: Record<string, string | undefined> = {
+      ...baseTestEnv(home),
+      CLAUDE_CODE_OAUTH_TOKEN: 'sk-ant-leftover',
+    }
+    const r = spawnSync('node', [distTestCli, 'status', '--json'], { env, encoding: 'utf8' })
+    const parsed = JSON.parse(r.stderr)
+    expect(parsed.active).toBe(null)
+    expect(parsed.thisShell).toBe('stale')
+
+    home.cleanup()
+  })
+
   test('remove against a throwing keystore: exit 4, store byte-identical', () => {
     const home = makeTmpHome()
     const env: Record<string, string | undefined> = { ...baseTestEnv(home), CLAUDEFOB_FAKE_KEYSTORE: '__THROW__' }

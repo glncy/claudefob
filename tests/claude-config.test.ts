@@ -112,6 +112,21 @@ describe('ensureOnboarding', () => {
     })
   })
 
+  test('nested object with a same-named key: only the top-level key is patched (regression)', () => {
+    // Regression: a global regex against the whole text patches the FIRST textual occurrence of
+    // "hasCompletedOnboarding": <literal>, which can be a nested object's key of the same name
+    // rather than the real top-level one. That used to make verification correctly refuse the
+    // write (nested value changed instead of the top-level one) even though a real automatic
+    // patch was possible. The fix locates the top-level key via the depth scanner, so only it
+    // is touched and the nested value is untouched.
+    const original = JSON.stringify({ a: { hasCompletedOnboarding: false }, hasCompletedOnboarding: false })
+    const { ok, text } = buildPatched(original)
+    expect(ok).toBe(true)
+    const parsed = JSON.parse(text)
+    expect(parsed.hasCompletedOnboarding).toBe(true)
+    expect(parsed.a.hasCompletedOnboarding).toBe(false)
+  })
+
   test('a patch that would reorder or drop a key fails verification', () => {
     // Simulate via buildPatched directly with a hand-checked pathological string that our regex
     // cannot safely handle: a key literally named the same as our marker inside a string value.

@@ -10,12 +10,18 @@ export type OnboardingResult =
   | { kind: 'verify-failed'; reason: string }
   | { kind: 'error'; reason: string }
 
-function findDuplicateTopLevelKeys(text: string): string | null {
-  // Scan the top-level object only (depth tracking), collecting "key": occurrences at depth 1.
+interface TopLevelKeyOccurrence {
+  key: string
+  /** index immediately after the key's colon and any whitespace: where the value begins */
+  valueStart: number
+}
+
+// Scan the top-level object only (depth tracking), collecting "key": occurrences at depth 1.
+function scanTopLevelKeys(text: string): TopLevelKeyOccurrence[] {
   let depth = 0
   let inString = false
   let escape = false
-  const seen = new Set<string>()
+  const occurrences: TopLevelKeyOccurrence[] = []
   let i = 0
   while (i < text.length) {
     const c = text[i]
@@ -58,8 +64,9 @@ function findDuplicateTopLevelKeys(text: string): string | null {
           } catch {
             key = raw
           }
-          if (seen.has(key)) return key
-          seen.add(key)
+          let valueStart = k + 1
+          while (valueStart < text.length && /\s/.test(text[valueStart]!)) valueStart++
+          occurrences.push({ key, valueStart })
         }
         i = j + 1
         continue
@@ -72,10 +79,19 @@ function findDuplicateTopLevelKeys(text: string): string | null {
     else if (c === '}') depth--
     i++
   }
+  return occurrences
+}
+
+function findDuplicateTopLevelKeys(text: string): string | null {
+  const seen = new Set<string>()
+  for (const { key } of scanTopLevelKeys(text)) {
+    if (seen.has(key)) return key
+    seen.add(key)
+  }
   return null
 }
 
-const VALUE_TOKEN_RE = /("hasCompletedOnboarding"\s*:\s*)(true|false|null)/
+const LITERAL_RE = /^(true|false|null)/
 
 export function buildPatched(originalText: string): { text: string; ok: boolean; reason?: string } {
   let parsed: unknown
@@ -101,10 +117,13 @@ export function buildPatched(originalText: string): { text: string; ok: boolean;
   const keyExists = Object.prototype.hasOwnProperty.call(obj, 'hasCompletedOnboarding')
 
   if (keyExists) {
-    if (!VALUE_TOKEN_RE.test(originalText) || (existingValue !== true && existingValue !== false && existingValue !== null)) {
+    const occurrence = scanTopLevelKeys(originalText).find((o) => o.key === 'hasCompletedOnboarding')
+    const literalMatch = occurrence ? LITERAL_RE.exec(originalText.slice(occurrence.valueStart)) : null
+    if (!occurrence || !literalMatch || (existingValue !== true && existingValue !== false && existingValue !== null)) {
       return { text: originalText, ok: false, reason: 'Existing "hasCompletedOnboarding" value is not a recognized literal (true/false/null).' }
     }
-    newText = originalText.replace(VALUE_TOKEN_RE, '$1true')
+    const literalEnd = occurrence.valueStart + literalMatch[0].length
+    newText = originalText.slice(0, occurrence.valueStart) + 'true' + originalText.slice(literalEnd)
   } else {
     // Insert as first member of the top-level object, matching detected indentation.
     const openBraceIdx = originalText.indexOf('{')

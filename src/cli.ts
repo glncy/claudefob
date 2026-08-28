@@ -11,6 +11,7 @@ import { UsageError, AuthError, KeystoreError, reportAndExit } from './ui/errors
 import { selectToken, passwordPrompt, confirmPrompt, isCancelled, requireTTY, note } from './ui/prompts.ts'
 import { renderTable } from './ui/table.ts'
 import { colors } from './ui/colors.ts'
+import { scanFenceBlocks } from './rc-scan.ts'
 import fs from 'node:fs'
 
 // citty's runMain catches everything thrown from a command's run() itself and always exits with
@@ -103,27 +104,22 @@ const listCommand = defineCommand({
   meta: { name: 'list', description: 'List stored tokens' },
   args: { json: { type: 'boolean' } },
   run: guard(async ({ args }) => {
+    // §2's rationale is that `list`/`status` read only store.json so they are instant and never
+    // trigger a keystore prompt. §4.2's "⚠ missing" marker would require a keystore read per
+    // token, which contradicts that — this is a SPEC self-contradiction (flagged in review).
+    // Resolved here in favor of §2: list stays metadata-only, no keystore calls. Drift detection
+    // (record present, secret gone) instead surfaces where the spec already requires a keystore
+    // read anyway: `use` (exits 4, §7) and `show`.
     const store = loadStore()
-    const keystore = getKeystore()
-    const rows = store.tokens.map((t) => {
-      let missing = false
-      try {
-        missing = keystore.get(t.name) === null
-      } catch {
-        missing = false
-      }
-      return { t, missing }
-    })
     if (args.json) {
       errJson({
         active: store.active,
-        tokens: rows.map(({ t, missing }) => ({
+        tokens: store.tokens.map((t) => ({
           name: t.name,
           description: t.description ?? null,
           createdAt: t.createdAt,
           masked: mask(t),
           active: t.name === store.active,
-          missing,
         })),
       })
       return
@@ -132,12 +128,12 @@ const listCommand = defineCommand({
       err('No tokens stored yet. Run `claudefob add <name>` first.')
       return
     }
-    const tableRows = rows.map(({ t, missing }) => ({
+    const tableRows = store.tokens.map((t) => ({
       active: t.name === store.active ? '●' : '',
       name: t.name,
       description: t.description ?? '',
       added: t.createdAt.slice(0, 10),
-      token: mask(t) + (missing ? ' ⚠ missing' : ''),
+      token: mask(t),
     }))
     err(
       renderTable(tableRows, [
@@ -209,7 +205,9 @@ const statusCommand = defineCommand({
     const envValue = process.env[VAR]
     let thisShell: 'inactive' | 'in sync' | 'stale'
     if (!envValue && !active) thisShell = 'inactive'
-    else if (!envValue || !active) thisShell = active ? 'stale' : 'inactive'
+    // A set variable with nothing active (e.g. after `stop` in another terminal) or an active
+    // token this shell hasn't picked up yet is drift, not simple "inactive" — SPEC §4.4.
+    else if (!envValue || !active) thisShell = 'stale'
     else thisShell = last4(envValue) === active.last4 ? 'in sync' : 'stale'
 
     let execPolicyBlocked: boolean | undefined
@@ -396,12 +394,9 @@ const guideCommand = defineCommand({
       } catch {
         continue
       }
-      const lines = text.split('\n')
-      const start = lines.findIndex((l) => l.includes('>>> claudefob >>>'))
-      const end = lines.findIndex((l) => l.includes('<<< claudefob <<<'))
-      if (start !== -1) {
+      for (const block of scanFenceBlocks(text)) {
         foundAny = true
-        err(`  ${c.path}: lines ${start + 1}-${end === -1 ? '?' : end + 1}`)
+        err(`  ${c.path}: lines ${block.start}-${block.end}`)
       }
     }
     if (!foundAny) err('  (none found)')
@@ -413,7 +408,13 @@ const guideCommand = defineCommand({
     if (process.platform === 'darwin') {
       err("  sed -i '' '/# >>> claudefob >>>/,/# <<< claudefob <<</d' <file>")
     } else if (process.platform === 'win32') {
-      err('  PowerShell: (Get-Content $PROFILE) | Where-Object { -not $inBlock } | Set-Content $PROFILE')
+      err('  PowerShell:')
+      err('  $inBlock = $false')
+      err('  (Get-Content $PROFILE) | Where-Object {')
+      err("    if ($_ -match '# >>> claudefob >>>') { $inBlock = $true; return $false }")
+      err("    if ($_ -match '# <<< claudefob <<<') { $inBlock = $false; return $false }")
+      err('    -not $inBlock')
+      err('  } | Set-Content $PROFILE')
     } else {
       err("  sed -i '/# >>> claudefob >>>/,/# <<< claudefob <<</d' <file>")
     }

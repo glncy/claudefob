@@ -29,6 +29,17 @@ function isTestBuild(): boolean {
   }
 }
 
+// The underlying napi-rs/keyring crate reports "no such entry" as an Error whose message
+// names the condition (Rust's keyring crate Display for Error::NoEntry is "No matching entry
+// found in secure storage"). Any other failure (locked keystore, dead D-Bus/Secret Service,
+// access denied, ambiguous entry) must NOT be treated as "missing" — it must surface as
+// KeystoreUnavailableError so callers can report an accurate error instead of silently
+// treating a transient outage as a missing secret.
+export function isNoEntryError(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e)
+  return /no[\s\S]{0,40}entry/i.test(msg)
+}
+
 export function realKeystore(): Keystore {
   return {
     get(name: string): string | null {
@@ -38,10 +49,12 @@ export function realKeystore(): Keystore {
         const entry = new Entry(SERVICE, name)
         try {
           return entry.getPassword()
-        } catch {
-          return null
+        } catch (e) {
+          if (isNoEntryError(e)) return null
+          throw new KeystoreUnavailableError('The OS keystore is unavailable.', e)
         }
       } catch (e) {
+        if (e instanceof KeystoreUnavailableError) throw e
         throw new KeystoreUnavailableError('The OS keystore is unavailable.', e)
       }
     },
