@@ -35,6 +35,39 @@ function isTestBuild(): boolean {
 // access denied, ambiguous entry) must NOT be treated as "missing" — it must surface as
 // KeystoreUnavailableError so callers can report an accurate error instead of silently
 // treating a transient outage as a missing secret.
+/**
+ * SPEC §7 / ADDENDUM A5: an error must name the fix, not just the failure. The Linux command here
+ * is the one CI proves works (.github/workflows/ci.yml), so the printed advice cannot drift from
+ * reality.
+ */
+export function keystoreHint(platform: NodeJS.Platform = process.platform): string {
+  if (platform === 'linux') {
+    return (
+      'The OS keystore is unavailable. claudefob needs a Secret Service provider (gnome-keyring ' +
+      'or kwallet) running.\n' +
+      '  Install:  sudo apt-get install -y gnome-keyring dbus-x11\n' +
+      '  Start it: export $(dbus-launch)\n' +
+      '            eval "$(printf \'\\n\' | gnome-keyring-daemon --unlock --components=secrets)"\n' +
+      '  On a desktop session this normally runs already; check with: systemctl --user status gnome-keyring-daemon'
+    )
+  }
+  if (platform === 'darwin') {
+    return (
+      'The OS keystore is unavailable. Your login keychain may be locked or missing.\n' +
+      '  Unlock it: security unlock-keychain ~/Library/Keychains/login.keychain-db\n' +
+      '  Or inspect it in Keychain Access.'
+    )
+  }
+  if (platform === 'win32') {
+    return (
+      'The OS keystore is unavailable. Windows Credential Manager could not be reached.\n' +
+      '  Check the Credential Manager service: sc query VaultSvc\n' +
+      '  Or open it from Control Panel > Credential Manager.'
+    )
+  }
+  return `The OS keystore is unavailable. No Secret Service backend is known for platform '${platform}'.`
+}
+
 export function isNoEntryError(e: unknown): boolean {
   const msg = e instanceof Error ? e.message : String(e)
   // Linux Secret Service phrases a missing secret as "no result found"; macOS/Windows use
@@ -54,11 +87,11 @@ export function realKeystore(): Keystore {
           return entry.getPassword()
         } catch (e) {
           if (isNoEntryError(e)) return null
-          throw new KeystoreUnavailableError('The OS keystore is unavailable.', e)
+          throw new KeystoreUnavailableError(keystoreHint(), e)
         }
       } catch (e) {
         if (e instanceof KeystoreUnavailableError) throw e
-        throw new KeystoreUnavailableError('The OS keystore is unavailable.', e)
+        throw new KeystoreUnavailableError(keystoreHint(), e)
       }
     },
     set(name: string, secret: string): void {
@@ -68,7 +101,7 @@ export function realKeystore(): Keystore {
         const entry = new Entry(SERVICE, name)
         entry.setPassword(secret)
       } catch (e) {
-        throw new KeystoreUnavailableError('The OS keystore is unavailable.', e)
+        throw new KeystoreUnavailableError(keystoreHint(), e)
       }
     },
     delete(name: string): boolean {
@@ -82,7 +115,7 @@ export function realKeystore(): Keystore {
           return false
         }
       } catch (e) {
-        throw new KeystoreUnavailableError('The OS keystore is unavailable.', e)
+        throw new KeystoreUnavailableError(keystoreHint(), e)
       }
     },
   }

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { isNoEntryError } from '../src/keystore.ts'
+import { isNoEntryError, keystoreHint } from '../src/keystore.ts'
 
 describe('isNoEntryError distinguishes "no such secret" from other keystore failures', () => {
   test('matches the underlying keyring crate\'s NoEntry message', () => {
@@ -22,5 +22,24 @@ describe('isNoEntryError distinguishes "no such secret" from other keystore fail
   test('non-Error values never count as NoEntry', () => {
     expect(isNoEntryError('random string')).toBe(false)
     expect(isNoEntryError(undefined)).toBe(false)
+  })
+})
+
+describe('keystoreHint names an actionable fix on every platform (SPEC §7, ADDENDUM A5)', () => {
+  test('linux hint names a Secret Service provider and how to start it', () => {
+    const h = keystoreHint('linux')
+    expect(h).toContain('gnome-keyring')
+    expect(h).toContain('dbus-launch')
+  })
+  test('darwin hint names the login keychain', () => {
+    expect(keystoreHint('darwin')).toContain('unlock-keychain')
+  })
+  test('win32 hint names Credential Manager', () => {
+    expect(keystoreHint('win32')).toContain('Credential Manager')
+  })
+  test('every platform hint is more than a bare failure statement', () => {
+    for (const p of ['linux', 'darwin', 'win32'] as NodeJS.Platform[]) {
+      expect(keystoreHint(p).length).toBeGreaterThan(80)
+    }
   })
 })

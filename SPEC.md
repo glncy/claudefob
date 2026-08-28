@@ -101,8 +101,14 @@ accepts it as an argument. Rejects empty input. Writes secret to keystore, appen
 `createdAt` and `last4`. Does not activate.
 
 ### 4.2 `list [--json]`
-Table: name, description, added, masked token; `●` marks active. Metadata only — no keystore read.
-Row marked `⚠ missing` when metadata exists but the secret is gone.
+Table: name, description, added, masked token; `●` marks active. Metadata only — no keystore read,
+so it is instant and can never trigger a keystore prompt.
+
+*(Errata: earlier drafts also required a `⚠ missing` marker for records whose secret is gone. That
+is impossible without reading every secret, which contradicts the metadata-only rule above and its
+rationale in §2 — on Linux it could pop a Secret Service unlock, on macOS one keychain dialog per
+token. Resolved in favour of §2: drift is reported by `use` (exit 4) and `show`, which must touch
+the keystore anyway.)*
 
 ### 4.3 `show [<name>]`
 Name omitted → picker headed `Select a token to reveal`. **Pick first, then authenticate** — a
@@ -189,7 +195,10 @@ when required) · `3` auth failed or cancelled · `4` keystore unavailable.
 
 Linux with no Secret Service: `add` fails loudly with the fix — log in to a desktop session, or
 install and start gnome-keyring:
-`dbus-run-session -- bash -c 'echo -n "" | gnome-keyring-daemon --unlock --daemonize --components=secrets; exec $SHELL'`.
+`sudo apt-get install -y gnome-keyring dbus-x11`, then
+`export $(dbus-launch)` and `eval "$(printf '\n' | gnome-keyring-daemon --unlock --components=secrets)"`.
+This exact command is what CI runs (§11) and what `keystoreHint()` prints, so the advice cannot
+drift from what actually works.
 *(Errata: an earlier draft printed `dbus-run-session -- gnome-keyring-daemon --unlock`, which blocks
 the foreground shell and does not reliably expose the secrets component.)* **No plaintext fallback, by design.**
 Corrupt `store.json`: reported with path, never silently recreated.
@@ -244,13 +253,26 @@ quote escaping, shell/OS detection, store mutations, rc-file scanning, `last4`/m
 CI matrix `macos-latest` / `ubuntu-latest` / `windows-latest`: typecheck, unit tests, build, then
 an integration test that stores a real token, reads it back, and asserts the emitted code sets the
 variable in a real zsh/bash/pwsh session. Linux brings up the keystore with
-`dbus-run-session -- bash -c 'echo -n "" | gnome-keyring-daemon --unlock --daemonize --components=secrets; <test>'`
+`export $(dbus-launch)` followed by
+`eval "$(printf '\n' | gnome-keyring-daemon --unlock --components=secrets)"`, then the integration
+script. Eval-ing the daemon's output is required: without it the daemon runs but libsecret finds no
+default collection and every call fails with `Secret Service: no result found`.
 — the same incantation the §7 error message tells users to run, so CI validates the advice. macOS
 runners `security unlock-keychain` first, and every integration step is time-limited so a keychain
 prompt fails fast rather than hanging.
 
 Auth backends are interactive by design and cannot run in CI: injectable interface plus a
-`CLAUDEFOB_FAKE_AUTH=1` test hook that is never present in release builds.
+`CLAUDEFOB_FAKE_AUTH=1` test hook that is never present in release builds (proven by a test
+asserting the string is absent from `dist/cli.js`).
+
+Two consequences found while getting CI green, both permanent:
+
+- **The real backend is never invoked by an automated test.** On Windows, CredUI opens a modal
+  dialog that never returns on a headless runner; on GitHub's macOS images `sudo` is passwordless,
+  so the backend legitimately *succeeds* and neither its exit code nor the presence of the token on
+  stderr is assertable. Refusal is covered deterministically through the fake backend instead.
+- **The Linux and macOS integration scripts exercise the real keystore; Windows exercises
+  everything except `show`.**
 
 ## 12. Supported shells
 

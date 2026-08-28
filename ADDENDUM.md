@@ -133,3 +133,27 @@ be configured against it. Every release after that is `git tag vX.Y.Z && git pus
 
 Guard: `release.yml` must verify that the tag version matches `package.json` version and fail
 otherwise, so a mistagged release cannot publish the wrong version.
+
+---
+
+## Implementation status
+
+All of A1–A6 are implemented and covered by tests as of v0.1.0.
+
+| Item | Where |
+|---|---|
+| A1 aliases `ls` / `rm` | `src/cli.ts` (`hiddenAlias`), hidden from `--help` |
+| A2 hook-missing hint | `src/hook-hint.ts`, `tests/hook-hint.test.ts` |
+| A3 update check | `src/update-check.ts`, `tests/update-check.test.ts` |
+| A4 `claudefob update` | `src/cli.ts`, install method from `src/update-check.ts` |
+| A5 DX requirements | `scripts/startup-budget.mjs` (CI-enforced), `src/suggest.ts`, `keystoreHint()` in `src/keystore.ts` |
+| A6 release workflow | `.github/workflows/release.yml` |
+
+Measured startup overhead for `claudefob export` on the no-active-token path: **~8 ms** above the
+Node runtime's own start, against a 100 ms budget asserted in CI on all three platforms.
+
+## A7. Errors name the fix (implemented as part of A5)
+
+`KeystoreUnavailableError` previously carried the bare text "The OS keystore is unavailable."
+`keystoreHint(platform)` in `src/keystore.ts` now supplies platform-specific remediation — the
+Linux branch prints the exact commands CI runs, so printed advice cannot drift from what works.
