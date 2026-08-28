@@ -37,4 +37,9 @@ jobs:
         timeout-minutes: 5
         run: |
           sudo apt-get update && sudo apt-get install -y gnome-keyring dbus-x11
-          dbus-run-session -- bash -c 'echo -n "" | gnome-keyring-daemon --unlock --daemonize --components=secrets; node scripts/integration.mjs'
+          # `--unlock` on a machine with no existing login keyring must both create the default
+          # collection and export GNOME_KEYRING_CONTROL; without eval-ing its output the daemon
+          # runs but libsecret finds no default collection ("Secret Service: no result found").
+          export $(dbus-launch)
+          eval "$(printf '\n' | gnome-keyring-daemon --unlock --components=secrets)"
+          node scripts/integration.mjs

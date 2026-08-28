@@ -25,11 +25,16 @@ function captureStdout(fn: () => void): string {
 
 let home: ReturnType<typeof makeTmpHome>
 let prevXdg: string | undefined
+let prevAppData: string | undefined
 
 beforeEach(() => {
   home = makeTmpHome()
   prevXdg = process.env.XDG_CONFIG_HOME
+  prevAppData = process.env.APPDATA
+  // Both must be redirected: paths.ts reads APPDATA on win32 and XDG_CONFIG_HOME elsewhere, so
+  // setting only one left this in-process suite pointed at the real machine store on Windows.
   process.env.XDG_CONFIG_HOME = home.configHome
+  process.env.APPDATA = home.appDataHome
 })
 
 afterEach(() => {
@@ -37,6 +42,8 @@ afterEach(() => {
   delete process.env.CLAUDEFOB_DEBUG
   if (prevXdg === undefined) delete process.env.XDG_CONFIG_HOME
   else process.env.XDG_CONFIG_HOME = prevXdg
+  if (prevAppData === undefined) delete process.env.APPDATA
+  else process.env.APPDATA = prevAppData
   home.cleanup()
 })
 

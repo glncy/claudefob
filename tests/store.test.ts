@@ -75,7 +75,7 @@ describe('loadStore / saveStore', () => {
   test('missing file returns empty store', () => {
     const home = makeTmpHome()
     try {
-      const p = path.join(home.configHome, 'claudefob', 'store.json')
+      const p = path.join(home.storeDir, 'claudefob', 'store.json')
       expect(loadStore(p)).toEqual(emptyStore())
     } finally {
       home.cleanup()
@@ -84,7 +84,7 @@ describe('loadStore / saveStore', () => {
   test('round trip', () => {
     const home = makeTmpHome()
     try {
-      const p = path.join(home.configHome, 'claudefob', 'store.json')
+      const p = path.join(home.storeDir, 'claudefob', 'store.json')
       const s = addToken(emptyStore(), { name: 'a', description: 'd', createdAt: 'now', last4: 'aaaa' })
       saveStore(s, p)
       expect(loadStore(p)).toEqual(s)
@@ -96,7 +96,7 @@ describe('loadStore / saveStore', () => {
     if (process.platform === 'win32') return
     const home = makeTmpHome()
     try {
-      const p = path.join(home.configHome, 'claudefob', 'store.json')
+      const p = path.join(home.storeDir, 'claudefob', 'store.json')
       saveStore(emptyStore(), p)
       const mode = fs.statSync(p).mode & 0o777
       expect(mode).toBe(0o600)
@@ -107,7 +107,7 @@ describe('loadStore / saveStore', () => {
   test('corrupt JSON throws CorruptStoreError with path', () => {
     const home = makeTmpHome()
     try {
-      const dir = path.join(home.configHome, 'claudefob')
+      const dir = path.join(home.storeDir, 'claudefob')
       fs.mkdirSync(dir, { recursive: true })
       const p = path.join(dir, 'store.json')
       fs.writeFileSync(p, '{not json')
@@ -124,7 +124,7 @@ describe('loadStore / saveStore', () => {
   test('wrong version throws CorruptStoreError', () => {
     const home = makeTmpHome()
     try {
-      const dir = path.join(home.configHome, 'claudefob')
+      const dir = path.join(home.storeDir, 'claudefob')
       fs.mkdirSync(dir, { recursive: true })
       const p = path.join(dir, 'store.json')
       fs.writeFileSync(p, JSON.stringify({ version: 2, active: null, tokens: [] }))

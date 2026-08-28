@@ -98,8 +98,8 @@ describe('stdout/stderr discipline over a real subprocess', () => {
       active: null,
       tokens: [{ name: 'work', description: 'day job', createdAt: new Date().toISOString(), last4: 'aaaa' }],
     }
-    fs.mkdirSync(path.join(home.configHome, 'claudefob'), { recursive: true })
-    fs.writeFileSync(path.join(home.configHome, 'claudefob', 'store.json'), JSON.stringify(store), { mode: 0o600 })
+    fs.mkdirSync(path.join(home.storeDir, 'claudefob'), { recursive: true })
+    fs.writeFileSync(path.join(home.storeDir, 'claudefob', 'store.json'), JSON.stringify(store), { mode: 0o600 })
     fs.writeFileSync(home.fakeKeystorePath, JSON.stringify({ work: 'sk-ant-aaaa' }))
 
     const listR = runIn(['list'])
@@ -154,7 +154,7 @@ describe('stdout/stderr discipline over a real subprocess', () => {
       active: null,
       tokens: [{ name: 'ghost', createdAt: new Date().toISOString(), last4: 'aaaa' }],
     }
-    const storeDir = path.join(home.configHome, 'claudefob')
+    const storeDir = path.join(home.storeDir, 'claudefob')
     fs.mkdirSync(storeDir, { recursive: true })
     const storePath = path.join(storeDir, 'store.json')
     fs.writeFileSync(storePath, JSON.stringify(store), { mode: 0o600 })
@@ -189,7 +189,7 @@ describe('stdout/stderr discipline over a real subprocess', () => {
       active: null,
       tokens: [{ name: 'work', createdAt: new Date().toISOString(), last4: 'aaaa' }],
     }
-    const storeDir = path.join(home.configHome, 'claudefob')
+    const storeDir = path.join(home.storeDir, 'claudefob')
     fs.mkdirSync(storeDir, { recursive: true })
     fs.writeFileSync(path.join(storeDir, 'store.json'), JSON.stringify(store), { mode: 0o600 })
 
@@ -212,7 +212,7 @@ describe('stdout/stderr discipline over a real subprocess', () => {
       active: null,
       tokens: [{ name: 'work', createdAt: new Date().toISOString(), last4: 'aaaa' }],
     }
-    const storeDir = path.join(home.configHome, 'claudefob')
+    const storeDir = path.join(home.storeDir, 'claudefob')
     fs.mkdirSync(storeDir, { recursive: true })
     fs.writeFileSync(path.join(storeDir, 'store.json'), JSON.stringify(store), { mode: 0o600 })
 
@@ -248,7 +248,7 @@ describe('stdout/stderr discipline over a real subprocess', () => {
       active: null,
       tokens: [{ name: 'work', createdAt: new Date().toISOString(), last4: 'aaaa' }],
     }
-    const storeDir = path.join(home.configHome, 'claudefob')
+    const storeDir = path.join(home.storeDir, 'claudefob')
     fs.mkdirSync(storeDir, { recursive: true })
     const storePath = path.join(storeDir, 'store.json')
     fs.writeFileSync(storePath, JSON.stringify(store), { mode: 0o600 })

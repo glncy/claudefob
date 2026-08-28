@@ -7,6 +7,8 @@ export interface TmpHome {
   configHome: string
   appDataHome: string
   fakeKeystorePath: string
+  /** Where paths.ts will actually look for store.json on THIS platform. */
+  storeDir: string
   cleanup(): void
 }
 
@@ -20,6 +22,9 @@ export function makeTmpHome(): TmpHome {
     home,
     configHome,
     appDataHome,
+    // paths.ts resolves the config dir from APPDATA on win32 and XDG_CONFIG_HOME elsewhere.
+    // Seeding a store into the wrong one silently produced "no such token" on Windows only.
+    storeDir: process.platform === 'win32' ? appDataHome : configHome,
     fakeKeystorePath: path.join(home, 'fake-keystore.json'),
     cleanup() {
       fs.rmSync(home, { recursive: true, force: true })

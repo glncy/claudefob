@@ -143,10 +143,15 @@ if (process.platform === 'win32') {
   }
 }
 
-// 4. `show`'s success path is not exercised here (auth is interactive by design); assert the
-//    negative instead: CLAUDEFOB_FAKE_AUTH=1 must be dead code against the release bundle.
+// 4. `show`'s success path is not exercised here (auth is interactive by design).
+//    The exit code cannot be asserted: some CI runners (GitHub's macOS images) have passwordless
+//    sudo, so the REAL backend legitimately succeeds and `show` exits 0. That the fake seam is
+//    absent from the release bundle is proven by the string-absence test in tests/streams.test.ts;
+//    here we assert only the invariant that holds in every environment — the secret never reaches
+//    stdout, whatever the backend decides.
 const showRes = run(['show', tokenName], { env: { ...env, CLAUDEFOB_FAKE_AUTH: '1' } })
-if (showRes.status !== 3) fail(`show with CLAUDEFOB_FAKE_AUTH=1 against dist/cli.js should exit 3, got ${showRes.status}`)
+if (showRes.stdout !== '') fail(`show wrote to stdout: ${JSON.stringify(showRes.stdout)}`)
+if (![0, 3].includes(showRes.status)) fail(`show should exit 0 or 3, got ${showRes.status}`)
 if (showRes.stdout.includes(tokenValue) || showRes.stderr.includes(tokenValue)) {
   fail('show leaked the token despite a failed/bypassed auth gate')
 }
