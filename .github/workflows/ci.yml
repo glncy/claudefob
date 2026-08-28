@@ -16,6 +16,14 @@ jobs:
         #                         bundle in which CLAUDEFOB_FAKE_* hooks are live
       - run: bun test # unit tests (pure) + subprocess tests driving dist-test/cli.js
       - run: bun run build # dist/cli.js — the release bundle, hooks dead-code-eliminated
+      - name: install fish (linux) so the fish hook block is parsed by a real fish
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y fish
+      - name: install fish (macos)
+        if: matrix.os == 'macos-latest'
+        run: brew install fish
+      - name: hook block syntax on every shell available here
+        run: node scripts/hook-syntax.mjs
       - name: startup budget (ADDENDUM A5)
         run: node scripts/startup-budget.mjs
       - name: integration (macos)

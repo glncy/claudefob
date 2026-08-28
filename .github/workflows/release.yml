@@ -19,6 +19,7 @@ jobs:
       - run: bun run build:test
       - run: bun test
       - run: bun run build
+      - run: node scripts/hook-syntax.mjs
       - run: node scripts/startup-budget.mjs
 
   publish:
