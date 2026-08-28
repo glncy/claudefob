@@ -222,13 +222,10 @@ three-line rc block that sources it.
 - `init --inline` keeps the old behaviour for anyone who prefers a single file.
 
 
-## A12. init pads only when the target needs it
 
-A leading blank line stops the block butting against the previous entry, but adding one
-unconditionally stacked blank lines on files that already ended with one.
+## A12. init padding stays simple (A12 superseded)
 
-`init` cannot see the shell's `>>` redirect, so it inspects the file it is suggesting for the
-detected shell, or one named explicitly with `--rc <file>`. No leading blank line is emitted when
-that file is missing, empty, or already ends in a blank line. CRLF is normalised first so a Windows
-profile is judged the same way. When no file can be determined it pads, since jamming the block
-onto an existing line is the worse failure.
+An earlier revision inspected the target rc file and padded only when it did not already end in a
+blank line. It was removed: it is cosmetic, it needed an `--rc` flag to be correct, and it guessed
+wrong whenever the shell redirect pointed somewhere other than the detected shell's default file.
+`init` emits one leading blank line, always.

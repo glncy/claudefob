@@ -34,9 +34,7 @@ source ~/.config/claudefob/hook.sh
 Source it — do not run it. The script is not executable on purpose: executing it would spawn a
 child shell that exits immediately, changing nothing in your session.
 
-`init` prints that exact line for you. It also adds a blank line before the block only when your
-startup file needs one — pass `--rc <file>` if you are appending somewhere other than the default
-for your shell, so the spacing is judged against the right file. It is needed only once, at install time — a child process
+`init` prints that exact line for you. It is needed only once, at install time — a child process
 cannot modify its parent shell, and with `>>` the block goes to your rc file rather than to the
 shell.
 

@@ -3,9 +3,7 @@ import { loadStore, saveStore, findToken, addToken, removeToken, setActive, vali
 import { getKeystore, KeystoreUnavailableError } from './keystore.ts'
 import { codegenFor, detectShell, parseShellFlag, type ShellDialect } from './shell/index.ts'
 import { ensureOnboarding } from './claude-config.ts'
-import { rcCandidates, hookScriptPath, configDir, powershellProfilePaths } from './paths.ts'
-import os from 'node:os'
-import path from 'node:path'
+import { rcCandidates, hookScriptPath, configDir } from './paths.ts'
 import { selectBackend, AuthUnavailableError } from './auth/index.ts'
 import { emitShellCode, err, errJson } from './ui/out.ts'
 import { runExport, VAR } from './export.ts'
@@ -18,7 +16,6 @@ import { warnIfHookMissing, installCommandFor, suggestedRcFile } from './hook-hi
 import { maybeNotifyUpdate, detectInstallMethod, updateCommandFor, probe } from './update-check.ts'
 import { scanFenceBlocks } from './rc-scan.ts'
 import { replaceBlocks, writeFileAtomic } from './rc-update.ts'
-import { needsLeadingBlankLine } from './pad.ts'
 import fs from 'node:fs'
 
 // citty's runMain catches everything thrown from a command's run() itself and always exits with
@@ -370,34 +367,18 @@ const removeCommand = defineCommand({
   }),
 })
 
-/** Absolute path of the rc file `init` assumes when --rc is not given. */
-function defaultRcPath(shell: ShellDialect): string | undefined {
-  const suggested = suggestedRcFile(shell)
-  if (suggested.startsWith('~/')) return path.join(os.homedir(), suggested.slice(2))
-  if (suggested === '$PROFILE') {
-    const { ps7 } = powershellProfilePaths()
-    return ps7
-  }
-  return undefined
-}
-
 const initCommand = defineCommand({
   meta: { name: 'init', description: 'Print the shell integration block' },
   args: {
     shell: { type: 'string' },
     inline: { type: 'boolean' },
     force: { type: 'boolean' },
-    // The file the output is being appended to. init cannot see the shell's redirect, so this is
-    // how it can pad exactly right; without it the detected shell's usual rc file is assumed.
-    rc: { type: 'string' },
   },
   run: guard(async ({ args }) => {
     const shell = resolveShell(args)
     const gen = codegenFor(shell)
     err(`Detected shell: ${shell}. Override with --shell.`)
 
-    const rcTarget = (args.rc as string | undefined) ?? defaultRcPath(shell)
-    const pad = needsLeadingBlankLine(rcTarget) ? '\n' : ''
 
     // init cannot see the shell's redirect, so it cannot know where its output is going. It reads
     // the known startup files instead and refuses when a block is already installed — a warning
@@ -450,7 +431,7 @@ const initCommand = defineCommand({
         err(`  ${gen.id === 'powershell' ? '. ' : 'source '}${gen.quote(scriptPath)}`)
         err('')
         err('Run `claudefob guide` for the full list of startup files and which one to pick.')
-        emitShellCode(pad + gen.sourceBlock(scriptPath))
+        emitShellCode('\n' + gen.sourceBlock(scriptPath))
         return
       } catch (e) {
         debug(e)
@@ -462,7 +443,7 @@ const initCommand = defineCommand({
     err(`  ${installCommandFor(shell)}`)
     err('It takes effect in any terminal you open afterwards.')
     err('Run `claudefob guide` for the full list of startup files and which one to pick.')
-    emitShellCode(pad + gen.hookBlock())
+    emitShellCode('\n' + gen.hookBlock())
   }),
 })
 
@@ -640,7 +621,7 @@ const exportCommand = defineCommand({
   }),
 })
 
-export const VERSION = '0.2.4'
+export const VERSION = '0.2.5'
 
 /** Same command under another name, hidden from --help so only the canonical name is advertised. */
 function hiddenAlias<T extends { meta?: unknown }>(cmd: T, name: string): T {
