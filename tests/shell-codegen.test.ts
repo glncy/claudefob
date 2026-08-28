@@ -149,3 +149,30 @@ describe('hook blocks carry the cross-terminal prompt sync', () => {
     }
   })
 })
+
+describe('hook blocks degrade quietly when the binary is absent', () => {
+  test('posix wraps everything in a command -v guard', () => {
+    // Regression: without this, a shell whose PATH lacks claudefob (uninstalled, or installed
+    // under a different Node version by fnm/nvm) prints "command not found" on every startup.
+    const b = codegenFor('posix').hookBlock()
+    const lines = b.split('\n')
+    expect(lines[1]).toBe('if command -v claudefob >/dev/null 2>&1; then')
+    expect(lines[lines.length - 2]).toBe('fi')
+  })
+
+  test('fish wraps everything in a command -v guard', () => {
+    const b = codegenFor('fish').hookBlock()
+    const lines = b.split('\n')
+    expect(lines[3]).toBe('if command -v claudefob >/dev/null 2>&1')
+    expect(lines[lines.length - 2]).toBe('end')
+  })
+
+  test('no executable line in the posix block sits outside the guard', () => {
+    const b = codegenFor('posix').hookBlock()
+    const inner = b.split('\n').slice(2, -2)
+    for (const line of inner) {
+      if (line.trim() === '' || line.trim().startsWith('#')) continue
+      expect(line.startsWith('  ')).toBe(true)
+    }
+  })
+})

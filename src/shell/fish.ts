@@ -17,6 +17,9 @@ export const fishCodegen: ShellCodegen = {
   hookBlock() {
     return [
       '# >>> claudefob >>>',
+      '# Degrade quietly when the binary is absent (uninstalled, or installed under a different',
+      '# runtime version by a version manager).',
+      'if command -v claudefob >/dev/null 2>&1',
       'set -gx CLAUDEFOB_HOOK 1',
       'eval (command claudefob export --shell fish)',
       '# Seed the sync marker at startup; see the posix block for why lazy creation misses a switch.',
@@ -43,6 +46,7 @@ export const fishCodegen: ShellCodegen = {
       '    or return 0',
       '    test -n "$__cf_out"; and eval $__cf_out',
       '    return 0',
+      'end',
       'end',
       '# <<< claudefob <<<',
     ].join('\n')
