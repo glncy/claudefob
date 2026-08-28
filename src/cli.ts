@@ -15,6 +15,7 @@ import { unknownTokenMessage } from './suggest.ts'
 import { warnIfHookMissing, installCommandFor, suggestedRcFile } from './hook-hint.ts'
 import { maybeNotifyUpdate, detectInstallMethod, updateCommandFor, probe } from './update-check.ts'
 import { scanFenceBlocks } from './rc-scan.ts'
+import { replaceBlocks, writeFileAtomic } from './rc-update.ts'
 import fs from 'node:fs'
 
 // citty's runMain catches everything thrown from a command's run() itself and always exits with
@@ -378,7 +379,9 @@ const initCommand = defineCommand({
     err(`  ${installCommandFor(shell)}`)
     err('It takes effect in any terminal you open afterwards.')
     err('Run `claudefob guide` for the full list of startup files and which one to pick.')
-    emitShellCode(codegenFor(shell).hookBlock())
+    // Padded with blank lines: appended with `>>` this would otherwise butt directly against
+    // whatever the last line of the rc file happens to be.
+    emitShellCode('\n' + codegenFor(shell).hookBlock() + '\n')
   }),
 })
 
@@ -463,8 +466,65 @@ const updateCommand = defineCommand({
       err(`Update command failed. Run it manually:\n  ${cmd}`)
       process.exit(1)
     }
+    await refreshInstalledHooks(Boolean(args.yes))
   }),
 })
+
+/**
+ * After the package itself is updated, bring any hook block the user installed up to date.
+ *
+ * claudefob never *creates* a block — that stays the user's decision, made by running `init` and
+ * redirecting it themselves. This only rewrites blocks that already exist, and asks first.
+ *
+ * The new block text is read from the freshly installed binary rather than generated in-process:
+ * this process is still running the OLD build, so its own codegen would write the old block back.
+ */
+async function refreshInstalledHooks(assumeYes: boolean): Promise<void> {
+  const { spawnSync } = await import('node:child_process')
+  const targets: { path: string; text: string }[] = []
+  for (const c of rcCandidates()) {
+    let text: string
+    try {
+      text = fs.readFileSync(c.path, 'utf8')
+    } catch {
+      continue
+    }
+    if (scanFenceBlocks(text).length > 0) targets.push({ path: c.path, text })
+  }
+  if (targets.length === 0) return
+
+  const shell = detectShell()
+  const gen = spawnSync('claudefob', ['init', '--shell', shell], { encoding: 'utf8' })
+  if (gen.status !== 0 || !gen.stdout.trim()) {
+    err('Could not read the new hook block from the updated binary; leaving your shell files alone.')
+    err('Update the block by hand with: claudefob guide')
+    return
+  }
+  const newBlock = gen.stdout.trim()
+
+  for (const t of targets) {
+    const result = replaceBlocks(t.text, newBlock)
+    if (result.replaced === 0 || result.unchanged) continue
+    if (!assumeYes) {
+      if (!process.stdin.isTTY) {
+        err(`The claudefob block in ${t.path} is out of date. Re-run with --yes to update it.`)
+        continue
+      }
+      const ok = await confirmPrompt(`Update the claudefob block in ${t.path}?`)
+      if (isCancelled(ok) || !ok) {
+        err(`Left ${t.path} unchanged.`)
+        continue
+      }
+    }
+    try {
+      writeFileAtomic(t.path, result.text)
+      err(`Updated the claudefob block in ${t.path}. It applies to terminals you open from now on.`)
+    } catch (e) {
+      debug(e)
+      err(`Could not write ${t.path}. Update the block by hand with: claudefob guide`)
+    }
+  }
+}
 
 const exportCommand = defineCommand({
   meta: { name: 'export', description: 'Internal: emit shell code for current state', hidden: true },
@@ -483,7 +543,7 @@ const exportCommand = defineCommand({
   }),
 })
 
-export const VERSION = '0.1.3'
+export const VERSION = '0.1.4'
 
 /** Same command under another name, hidden from --help so only the canonical name is advertised. */
 function hiddenAlias<T extends { meta?: unknown }>(cmd: T, name: string): T {

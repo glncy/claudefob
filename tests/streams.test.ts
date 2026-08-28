@@ -64,6 +64,14 @@ describe('stdout/stderr discipline over a real subprocess', () => {
     r.home.cleanup()
   })
 
+  test('init pads the block with blank lines so `>>` never jams it onto existing content', () => {
+    const r = run(['init', '--shell', 'posix'])
+    expect(r.status).toBe(0)
+    expect(r.stdout.startsWith('\n# >>> claudefob >>>')).toBe(true)
+    expect(r.stdout.endsWith('# <<< claudefob <<<\n\n')).toBe(true)
+    r.home.cleanup()
+  })
+
   test('export with nothing active: exit 0, empty stdout', () => {
     const r = run(['export', '--shell', 'posix'])
     expect(r.status).toBe(0)

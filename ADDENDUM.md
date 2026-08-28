@@ -178,3 +178,27 @@ per-process. Resolved without any user-facing flag: the sync is part of the stan
 
 **Not solvable:** a running Claude Code process keeps the token it launched with. Its environment
 was copied at spawn and nothing outside it can change that.
+
+## A9. `update` refreshes an installed hook block
+
+Originally claudefob never wrote to a shell startup file at all. That rule is narrowed, not
+dropped: `claudefob update` may **rewrite a block the user already installed**, and nothing else.
+
+- It never *creates* a block. Installing integration stays the user's decision, made by running
+  `init` and redirecting the output themselves.
+- Every rc candidate is scanned; only files that already contain the fence markers are touched.
+- Each file is confirmed separately unless `--yes`. Non-interactive runs print what is stale and
+  change nothing.
+- The replacement text is read by running `claudefob init` from the **freshly installed** binary.
+  Generating it in-process would write the old block back, because the running process is still
+  the pre-update build.
+- Content outside the markers stays byte-identical, the file mode is preserved, and the write is
+  atomic (temp file in the same directory, then rename).
+- An unterminated block (opening marker, no closing marker) is left alone rather than swallowing
+  the rest of the file.
+
+## A10. `init` output is padded
+
+`init` emits a leading and trailing blank line around the block, so
+`claudefob init >> ~/.zshrc` cannot butt the fence marker directly against the last existing line
+of the file.
